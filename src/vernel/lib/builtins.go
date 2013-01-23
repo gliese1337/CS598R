@@ -53,31 +53,17 @@ func rtlWrapper(eval Evaller, dyn_env *Environment, f *VPair, a *VPair) map[VSym
 	return m
 }
 
-func wrap(eval Evaller, clos_env *Environment, x *VPair) (interface{}, *Environment, bool) {
+func wrap(eval Evaller, env *Environment, x *VPair) (interface{}, *Environment, bool) {
 	if x == nil {
-		panic("No Arguments to vau")
+		panic("No Argument to wrap")
 	}
-	formals, ok := x.Car.(*VPair)
+	proc, ok := eval(x.Car, env).(*Combiner)
 	if !ok {
-		panic("Invalid Argument Declaration")
+		panic("Non-combiner passed to wrap")
 	}
-	sym_rest, ok := x.Cdr.(*VPair)
-	if !ok {
-		panic("Invalid Arguments to vau")
-	}
-	dyn_sym, ok := sym_rest.Car.(VSym)
-	if !ok {
-		panic("Missing Dynamic Environment Binding")
-	}
-	rest, ok := sym_rest.Cdr.(*VPair)
-	if !ok {
-		panic("Missing Vau Expression Body")
-	}
-	return &Combiner{
-		Stat_env: clos_env,
-		Formals:  formals,
-		Dyn_sym:  dyn_sym,
-		Body:     rest.Car,
+	return &Applicative{
+		Wrapper: rtlWrapper,
+		Vau:     proc,
 	}, nil, false
 }
 
@@ -117,11 +103,35 @@ func cdr(eval Evaller, env *Environment, x *VPair) (interface{}, *Environment, b
 	panic("Invalid Argument to cdr")
 }
 
+func def(eval Evaller, env *Environment, x *VPair) (interface{}, *Environment, bool) {
+	if x == nil {
+		panic("No Arguments to def")
+	}
+	sym, ok := x.Car.(VSym)
+	if !ok {
+		panic("Cannot define non-symbol")
+	}
+	rest, ok := x.Cdr.(*VPair)
+	if !ok {
+		panic("Non-list argument to def")
+	}
+	var val interface{}
+	if rest == nil {
+		val = VNil
+	} else {
+		val = eval(rest.Car, env)
+	}
+	env.Set(sym, val)
+	return val, nil, false
+}
+
 var Standard = NewEnv(
 	nil,
 	map[VSym]interface{}{
+		VSym("def"):  NativeFn{def},
 		VSym("cons"): NativeFn{cons},
 		VSym("car"):  NativeFn{car},
 		VSym("cdr"):  NativeFn{cdr},
 		VSym("vau"):  NativeFn{vau},
+		VSym("wrap"): NativeFn{wrap},
 	})
