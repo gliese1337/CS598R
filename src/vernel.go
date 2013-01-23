@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
 	"bufio"
 	"fmt"
-	"vernel/parser"
+	"os"
 	"vernel/eval"
 	"vernel/lib"
+	"vernel/parser"
 )
 
 func main() {
@@ -23,18 +23,25 @@ func main() {
 		defer file.Close()
 	}
 
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Error: %s\n", err)
+		}
+	}()
+
 	inchan := make(chan rune)
-	go func(){
+	go func() {
 		freader := bufio.NewReader(file)
-		loop: if r, _, err := freader.ReadRune(); err == nil {
+	loop:
+		if r, _, err := freader.ReadRune(); err == nil {
 			inchan <- r
 			goto loop
 		}
 		close(inchan)
 	}()
 	for expr := range parser.Parse(inchan) {
-		fmt.Printf("Expr: \"%v\"\n",expr)
-		fmt.Printf("Value: %v\n", eval.Eval(expr,lib.Standard))
+		fmt.Printf("Expr: %s\n", expr)
+		val := eval.Eval(expr, lib.Standard)
+		fmt.Printf("Value: %s\n", val)
 	}
 }
-
