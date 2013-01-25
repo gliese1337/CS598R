@@ -40,16 +40,12 @@ func specialState(in *runeBuffer, out chan *Item) stateFn {
 func switchState(in *runeBuffer, out chan *Item) stateFn {
 	if r, ok := in.peek(); ok {
 		switch {
+		case strings.IndexRune("().", r) >= 0:
+			in.next()
+			out <- &Item{Type: string(r), Token: string(r)}
+			return switchState
 		case strings.IndexRune("	 \r\n", r) >= 0:
 			return spaceState
-		case r == '(':
-			in.next()
-			out <- &Item{Type: "(", Token: "("}
-			return switchState
-		case r == ')':
-			in.next()
-			out <- &Item{Type: ")", Token: ")"}
-			return switchState
 		case r == '#':
 			return specialState
 		default:

@@ -17,16 +17,25 @@ func parse_special(in string) interface{} {
 	return nil
 }
 
-func parse_list(l *lexer.Lexer) (*VPair, bool) {
+func parse_list(l *lexer.Lexer) (interface{}, bool) {
 	token := l.Peek()
-	if token.Type == ")" {
+	switch token.Type {
+	case ")":
 		l.Next()
 		return VNil, true
-	} else if token.Type == "EOF" {
+	case "EOF":
 		return nil, false
+	case ".":
+		l.Next()
+		return parse(l)
 	}
 	if car, ok := parse(l); ok {
 		if cdr, ok := parse_list(l); ok {
+			if _, ok := cdr.(*VPair); !ok {
+				if l.Next().Type != ")" {
+					panic("Can't have multiple cdr expressions")
+				}
+			}
 			return &VPair{car, cdr}, true
 		}
 	}
@@ -35,20 +44,17 @@ func parse_list(l *lexer.Lexer) (*VPair, bool) {
 
 func parse(l *lexer.Lexer) (interface{}, bool) {
 	token := l.Next()
-	switch {
-	case token.Type == "symbol":
+	switch token.Type {
+	case "symbol":
 		return VSym(token.Token), true
-	case token.Type == "special":
+	case "special":
 		return parse_special(token.Token), true
-	case token.Type == "EOF":
+	case "EOF":
 		return nil, false
-	case token.Type == "(":
+	case "(":
 		return parse_list(l)
-	case token.Type == ")":
-		panic("Unexpected )")
 	default:
-		fmt.Printf("%v\n", token)
-		panic("Invalid Token")
+		panic(fmt.Sprintf("Unexpected Token \"%s\"", token.Token))
 	}
 	return nil, false
 }

@@ -37,12 +37,18 @@ func match_args(f *VPair, a *VPair) map[VSym]interface{} {
 			panic("Cannot bind to non-symbol")
 		}
 		m[s] = a.Car
-		if fp, ok := f.Cdr.(*VPair); ok {
-			f = fp
+
+		ap, ok := a.Cdr.(*VPair)
+		switch fp := f.Cdr.(type) {
+		case *VPair:
+			f, a = fp, ap
+		case VSym:
+			if ok {
+				m[fp] = ap
+				f = nil
+			}
 		}
-		if ap, ok := a.Cdr.(*VPair); ok {
-			a = ap
-		}
+
 	}
 	return m
 }
