@@ -5,10 +5,16 @@ import (
 	"fmt"
 )
 
-type Evaller func(interface{}, *Environment) interface{}
+type Tail struct {
+	Expr interface{}
+	Env  *Environment
+	K    *Continuation
+}
+
+type Evaller func(interface{}, *Environment, *Continuation) interface{}
 
 type Callable interface {
-	Call(Evaller, *Environment, *VPair) (interface{}, *Environment, bool)
+	Call(Evaller, *Environment, *Continuation, *VPair) *Tail
 }
 
 type VSym string
@@ -26,18 +32,18 @@ func (v VBool) String() string {
 	return "#f"
 }
 
-func (v VBool) Call(eval Evaller, dyn_env *Environment, args *VPair) (interface{}, *Environment, bool) {
+func (v VBool) Call(eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
 	if args == nil {
-		return VNil, nil, false
+		return &Tail{VNil, env, k}
 	}
 	cdr, ok := args.Cdr.(*VPair)
 	if !ok || cdr == nil {
 		panic("Invalid Arguments to Branch")
 	}
 	if bool(v) {
-		return args.Car, dyn_env, true
+		return &Tail{args.Car, env, k}
 	}
-	return cdr.Car, dyn_env, true
+	return &Tail{cdr.Car, env, k}
 }
 
 type VPair struct {

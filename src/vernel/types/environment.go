@@ -48,11 +48,12 @@ func (env *Environment) Set(x VSym, y interface{}) interface{} {
 	return y
 }
 
-func (env *Environment) Call(_ Evaller, _ *Environment, args *VPair) (interface{}, *Environment, bool) {
+func (env *Environment) Call(_ Evaller, ce *Environment, k *Continuation, args *VPair) *Tail {
 	if args == nil {
-		return VNil, nil, false
+		return &Tail{VNil, env, k}
 	}
-	return args.Car, env, true
+	fmt.Printf("Evaluating %s\n", args.Car)
+	return &Tail{args.Car, env, k}
 }
 
 func NewEnv(p *Environment, v map[VSym]interface{}) *Environment {

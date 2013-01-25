@@ -1,16 +1,29 @@
 package types
 
+import "fmt"
+
+type Continuation struct {
+	Fn func(*VPair) *Tail
+}
+
+func (k *Continuation) Call(_ Evaller, _ *Environment, _ *Continuation, x *VPair) *Tail {
+	return k.Fn(x)
+}
+
+func (k *Continuation) String() string {
+	return "<cont>"
+}
+
 type NativeFn struct {
-	Fn func(Evaller, *Environment, *VPair) (interface{}, *Environment, bool)
+	Fn func(Evaller, *Environment, *Continuation, *VPair) *Tail
 }
 
-func (nfn NativeFn) Call(eval Evaller, env *Environment, x *VPair) (b interface{}, e *Environment, r bool) {
-	b, e, r = nfn.Fn(eval, env, x)
-	return
+func (nfn *NativeFn) Call(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+	return nfn.Fn(eval, env, k, x)
 }
 
-func (nfn NativeFn) String() string {
-	return "<native code>"
+func (nfn *NativeFn) String() string {
+	return "<native>"
 }
 
 func match_args(f *VPair, a *VPair) map[VSym]interface{} {
@@ -35,16 +48,27 @@ func match_args(f *VPair, a *VPair) map[VSym]interface{} {
 }
 
 type Combiner struct {
-	Stat_env *Environment
-	Formals  *VPair
-	Dyn_sym  VSym
-	Body     interface{}
+	Cenv    *Environment
+	Formals *VPair
+	Dsym    VSym
+	Body    interface{}
 }
 
-func (c *Combiner) Call(eval Evaller, dyn_env *Environment, args *VPair) (interface{}, *Environment, bool) {
+func (c *Combiner) Call(_ Evaller, denv *Environment, k *Continuation, args *VPair) *Tail {
 	arg_map := match_args(c.Formals, args)
-	arg_map[c.Dyn_sym] = dyn_env
-	return c.Body, NewEnv(c.Stat_env, arg_map), true
+	arg_map[c.Dsym] = &Applicative{
+		func(_ Callable, _ Evaller, ce *Environment, ck *Continuation, cargs *VPair) *Tail {
+			fmt.Printf("Env args: %s\n", cargs)
+			if cargs == nil {
+				return &Tail{VNil, ce, ck}
+			}
+			return &Tail{cargs.Car, ce, &Continuation{
+				func(v *VPair) *Tail { return denv.Call(nil, ce, ck, v) },
+			}}
+		},
+		denv,
+	}
+	return &Tail{c.Body, NewEnv(c.Cenv, arg_map), k}
 }
 
 func (c *Combiner) String() string {
@@ -52,15 +76,14 @@ func (c *Combiner) String() string {
 }
 
 type Applicative struct {
-	Wrapper  func(Callable, Evaller, *Environment, *VPair) (interface{}, *Environment, bool)
+	Wrapper  func(Callable, Evaller, *Environment, *Continuation, *VPair) *Tail
 	Internal Callable
 }
 
-func (a *Applicative) Call(eval Evaller, denv *Environment, args *VPair) (b interface{}, e *Environment, r bool) {
-	b, e, r = a.Wrapper(a.Internal, eval, denv, args)
-	return
+func (a *Applicative) Call(eval Evaller, denv *Environment, k *Continuation, args *VPair) *Tail {
+	return a.Wrapper(a.Internal, eval, denv, k, args)
 }
 
 func (a *Applicative) String() string {
-	return "<applicative>"
+	return fmt.Sprintf("<applicative: %s>", a.Internal)
 }

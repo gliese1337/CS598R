@@ -1,31 +1,51 @@
 package eval
 
 import (
+	"vernel/lib"
 	. "vernel/types"
 )
 
-func Eval(x interface{}, env *Environment) interface{} {
-start:
-	switch xt := x.(type) {
-	case VSym:
-		return env.Get(xt)
-	case *VPair: //(proc exp*)
-		var rec bool
-		if xt == nil {
-			return VNil
+func proc_k(env *Environment, k *Continuation, args *VPair) *Continuation {
+	return &Continuation{
+		func(p *VPair) *Tail {
+			if p != nil {
+				if proc, ok := p.Car.(Callable); ok {
+					return proc.Call(eval_rec, env, k, args)
+				}
+			}
+			panic("Non-callable in function position")
+		},
+	}
+
+}
+
+func eval_rec(x interface{}, env *Environment, k *Continuation) interface{} {
+	for k != nil {
+		switch xt := x.(type) {
+		case VSym:
+			x = env.Get(xt)
+		case *VPair:
+			if xt != nil {
+				arglist, ok := xt.Cdr.(*VPair)
+				if !ok {
+					panic("Non-list in argument position")
+				}
+				x, k = xt.Car, proc_k(env, k, arglist)
+				continue
+			}
 		}
-		arglist, ok := xt.Cdr.(*VPair)
-		if !ok {
-			panic("Non-list in argument position")
-		}
-		proc, ok := Eval(xt.Car, env).(Callable)
-		if !ok {
-			panic("Non-callable in procedure position")
-		}
-		x, env, rec = proc.Call(Eval, env, arglist)
-		if rec {
-			goto start
-		}
+		tail := k.Fn(&VPair{x, VNil})
+		x, env, k = tail.Expr, tail.Env, tail.K
 	}
 	return x
+}
+
+var top = &Continuation{
+	func(args *VPair) *Tail {
+		return &Tail{args.Car, nil, nil}
+	},
+}
+
+func Eval(x interface{}) interface{} {
+	return eval_rec(x, lib.Standard, top)
 }

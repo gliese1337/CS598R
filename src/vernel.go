@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"vernel/eval"
-	"vernel/lib"
 	"vernel/parser"
 )
 
@@ -40,8 +39,8 @@ func main() {
 		close(inchan)
 	}()
 	for expr := range parser.Parse(inchan) {
-		fmt.Printf("Expr: %s\n", expr)
-		val := eval.Eval(expr, lib.Standard)
-		fmt.Printf("Value: %s\n", val)
+		fmt.Printf("%s ->\n", expr)
+		val := eval.Eval(expr)
+		fmt.Printf("\t%s\n\n", val)
 	}
 }
