@@ -32,38 +32,24 @@ func vau(eval Evaller, clos_env *Environment, x *VPair) (interface{}, *Environme
 	}, nil, false
 }
 
-func rtlWrapper(eval Evaller, dyn_env *Environment, f *VPair, a *VPair) map[VSym]interface{} {
-	m := make(map[VSym]interface{})
-	for f != nil {
-		if a == nil {
-			panic("Too few arguments")
-		}
-		s, ok := f.Car.(VSym)
-		if !ok {
-			panic("Cannot bind to non-symbol")
-		}
-		m[s] = eval(a.Car, dyn_env)
-		if fp, ok := f.Cdr.(*VPair); ok {
-			f = fp
-		}
-		if ap, ok := a.Cdr.(*VPair); ok {
-			a = ap
-		}
-	}
-	return m
+func rtlWrapper(internal Callable, eval Evaller, dyn_env *Environment, args *VPair) (b interface{}, e *Environment, r bool) {
+	/*map arglist with eval function*/
+	var new_args *VPair
+	b, e, r = internal.Call(eval, dyn_env, new_args)
+	return
 }
 
 func wrap(eval Evaller, env *Environment, x *VPair) (interface{}, *Environment, bool) {
 	if x == nil {
 		panic("No Argument to wrap")
 	}
-	proc, ok := eval(x.Car, env).(*Combiner)
+	proc, ok := eval(x.Car, env).(Callable)
 	if !ok {
-		panic("Non-combiner passed to wrap")
+		panic("Non-proc passed to wrap")
 	}
 	return &Applicative{
-		Wrapper: rtlWrapper,
-		Vau:     proc,
+		Wrapper:  rtlWrapper,
+		Internal: proc,
 	}, nil, false
 }
 

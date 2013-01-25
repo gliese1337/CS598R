@@ -40,7 +40,7 @@ loop:
 		env = env.parent
 		goto loop
 	}
-	panic("Unbound Symbol")
+	panic("Unbound Symbol: " + string(x))
 }
 
 func (env *Environment) Set(x VSym, y interface{}) interface{} {
@@ -48,7 +48,7 @@ func (env *Environment) Set(x VSym, y interface{}) interface{} {
 	return y
 }
 
-func (env *Environment) Call(eval Evaller, dyn_env *Environment, args *VPair) (interface{}, *Environment, bool) {
+func (env *Environment) Call(_ Evaller, _ *Environment, args *VPair) (interface{}, *Environment, bool) {
 	if args == nil {
 		return VNil, nil, false
 	}

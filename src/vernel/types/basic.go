@@ -31,8 +31,8 @@ func (v VBool) Call(eval Evaller, dyn_env *Environment, args *VPair) (interface{
 		return VNil, nil, false
 	}
 	cdr, ok := args.Cdr.(*VPair)
-	if !ok {
-		panic("Non-list Argument to Branch")
+	if !ok || cdr == nil {
+		panic("Invalid Arguments to Branch")
 	}
 	if bool(v) {
 		return args.Car, dyn_env, true

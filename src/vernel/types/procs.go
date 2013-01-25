@@ -4,10 +4,11 @@ type NativeFn struct {
 	Fn func(Evaller, *Environment, *VPair) (interface{}, *Environment, bool)
 }
 
-func (nfn NativeFn) Call(eval Evaller, env *Environment, x *VPair) (v interface{}, e *Environment, r bool) {
-	v, e, r = nfn.Fn(eval, env, x)
+func (nfn NativeFn) Call(eval Evaller, env *Environment, x *VPair) (b interface{}, e *Environment, r bool) {
+	b, e, r = nfn.Fn(eval, env, x)
 	return
 }
+
 func (nfn NativeFn) String() string {
 	return "<native code>"
 }
@@ -51,13 +52,13 @@ func (c *Combiner) String() string {
 }
 
 type Applicative struct {
-	Wrapper func(Evaller, *Environment, *VPair, *VPair) map[VSym]interface{}
-	Vau     *Combiner
+	Wrapper  func(Callable, Evaller, *Environment, *VPair) (interface{}, *Environment, bool)
+	Internal Callable
 }
 
-func (a *Applicative) Call(eval Evaller, dyn_env *Environment, args *VPair) (interface{}, *Environment, bool) {
-	v := a.Vau
-	return v.Body, NewEnv(v.Stat_env, a.Wrapper(eval, dyn_env, v.Formals, args)), true
+func (a *Applicative) Call(eval Evaller, denv *Environment, args *VPair) (b interface{}, e *Environment, r bool) {
+	b, e, r = a.Wrapper(a.Internal, eval, denv, args)
+	return
 }
 
 func (a *Applicative) String() string {
