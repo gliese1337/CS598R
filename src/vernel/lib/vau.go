@@ -6,8 +6,9 @@ func vau(_ Evaller, cenv *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil {
 		panic("No Arguments to vau")
 	}
-	formals, ok := x.Car.(*VPair)
-	if !ok {
+	_, islist := x.Car.(*VPair)
+	_, issym := x.Car.(VSym)
+	if !islist || issym {
 		panic("Invalid Argument Declaration")
 	}
 	sym_rest, ok := x.Cdr.(*VPair)
@@ -24,7 +25,7 @@ func vau(_ Evaller, cenv *Environment, k *Continuation, x *VPair) *Tail {
 	}
 	return k.Fn(&VPair{&Combiner{
 		Cenv:    cenv,
-		Formals: formals,
+		Formals: x.Car,
 		Dsym:    dsym,
 		Body:    rest.Car,
 	}, VNil})

@@ -79,6 +79,10 @@ func last(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	return k.Fn(VNil)
 }
 
+func qlist(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	return k.Fn(&VPair{x, VNil})
+}
+
 func def(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil {
 		panic("No Arguments to def")

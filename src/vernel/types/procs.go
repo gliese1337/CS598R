@@ -26,36 +26,42 @@ func (nfn *NativeFn) String() string {
 	return "<native>"
 }
 
-func match_args(f *VPair, a *VPair) map[VSym]interface{} {
+func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 	m := make(map[VSym]interface{})
-	for f != nil {
-		if a == nil {
-			panic("Too few arguments")
-		}
-		s, ok := f.Car.(VSym)
-		if !ok {
-			panic("Cannot bind to non-symbol")
-		}
-		m[s] = a.Car
+	switch f := fs.(type) {
+	case *VPair:
+		for f != nil {
+			if a == nil {
+				panic("Too few arguments")
+			}
+			s, ok := f.Car.(VSym)
+			if !ok {
+				panic("Cannot bind to non-symbol")
+			}
+			m[s] = a.Car
 
-		ap, ok := a.Cdr.(*VPair)
-		switch fp := f.Cdr.(type) {
-		case *VPair:
-			f, a = fp, ap
-		case VSym:
-			if ok {
-				m[fp] = ap
-				f = nil
+			ap, ok := a.Cdr.(*VPair)
+			switch fp := f.Cdr.(type) {
+			case *VPair:
+				f, a = fp, ap
+			case VSym:
+				if ok {
+					m[fp] = ap
+					f = nil
+				}
 			}
 		}
-
+	case VSym:
+		m[f] = a
+	default:
+		panic("Invalid formals!")
 	}
 	return m
 }
 
 type Combiner struct {
 	Cenv    *Environment
-	Formals *VPair
+	Formals interface{}
 	Dsym    VSym
 	Body    interface{}
 }

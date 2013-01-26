@@ -15,4 +15,5 @@ var Standard = NewEnv(
 		VSym("wrap/rtl"): wrap_gen(rtlWrapper),
 		VSym("qprint"):   &NativeFn{qprint},
 		VSym("last"):     &NativeFn{last},
+		VSym("qlist"):    &NativeFn{qlist},
 	})
