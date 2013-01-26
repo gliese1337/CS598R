@@ -8,7 +8,7 @@ func vau(_ Evaller, cenv *Environment, k *Continuation, x *VPair) *Tail {
 	}
 	_, islist := x.Car.(*VPair)
 	_, issym := x.Car.(VSym)
-	if !islist || issym {
+	if !(islist || issym) {
 		panic("Invalid Argument Declaration")
 	}
 	sym_rest, ok := x.Cdr.(*VPair)
