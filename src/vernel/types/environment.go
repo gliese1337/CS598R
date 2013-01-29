@@ -59,3 +59,15 @@ func (env *Environment) Call(_ Evaller, ce *Environment, k *Continuation, args *
 func NewEnv(p *Environment, v map[VSym]interface{}) *Environment {
 	return &Environment{parent: p, values: v}
 }
+
+func WrapEnv(p *Environment) *Applicative {
+	return &Applicative{func(_ Callable, _ Evaller, ce *Environment, ck *Continuation, cargs *VPair) *Tail {
+		fmt.Printf("Env args: %s\n", cargs)
+		if cargs == nil {
+			return &Tail{VNil, ce, ck}
+		}
+		return &Tail{cargs.Car, ce, &Continuation{
+			func(v *VPair) *Tail { return p.Call(nil, ce, ck, v) },
+		}}
+	},p}
+}

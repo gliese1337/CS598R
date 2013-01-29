@@ -23,6 +23,12 @@ func (v VSym) String() string {
 	return string(v)
 }
 
+type VStr string
+
+func (v VStr) String() string {
+	return "\""+string(v)+"\""
+}
+
 type VBool bool
 
 func (v VBool) String() string {

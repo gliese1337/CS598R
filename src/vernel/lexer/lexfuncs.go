@@ -24,6 +24,21 @@ func symbolState(in *runeBuffer, out chan *Item) stateFn {
 	return switchState
 }
 
+func stringState(in *runeBuffer, out chan *Item) stateFn {
+	buf := new(bytes.Buffer)
+	in.next()
+	for {
+		r, ok, more := in.acceptNot("\"")
+		if !(more && ok) {
+			in.next()
+			break
+		}
+		buf.WriteRune(r)
+	}
+	out <- &Item{Type: "string", Token: buf.String()}
+	return switchState
+}
+
 func specialState(in *runeBuffer, out chan *Item) stateFn {
 	buf := new(bytes.Buffer)
 	for {
@@ -40,7 +55,7 @@ func specialState(in *runeBuffer, out chan *Item) stateFn {
 func switchState(in *runeBuffer, out chan *Item) stateFn {
 	if r, ok := in.peek(); ok {
 		switch {
-		case strings.IndexRune("().", r) >= 0:
+		case strings.IndexRune("().;", r) >= 0:
 			in.next()
 			out <- &Item{Type: string(r), Token: string(r)}
 			return switchState
@@ -48,6 +63,8 @@ func switchState(in *runeBuffer, out chan *Item) stateFn {
 			return spaceState
 		case r == '#':
 			return specialState
+		case r == '"':
+			return stringState
 		default:
 			return symbolState
 		}

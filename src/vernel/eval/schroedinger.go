@@ -1,7 +1,6 @@
 package eval
 
 import (
-	"vernel/lib"
 	. "vernel/types"
 )
 
@@ -10,7 +9,7 @@ func proc_k(env *Environment, k *Continuation, args *VPair) *Continuation {
 		func(p *VPair) *Tail {
 			if p != nil {
 				if proc, ok := p.Car.(Callable); ok {
-					return proc.Call(eval_rec, env, k, args)
+					return proc.Call(Eval, env, k, args)
 				}
 			}
 			panic("Non-callable in function position")
@@ -19,7 +18,7 @@ func proc_k(env *Environment, k *Continuation, args *VPair) *Continuation {
 
 }
 
-func eval_rec(x interface{}, env *Environment, k *Continuation) interface{} {
+func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
 	for k != nil {
 		switch xt := x.(type) {
 		case VSym:
@@ -38,14 +37,4 @@ func eval_rec(x interface{}, env *Environment, k *Continuation) interface{} {
 		x, env, k = tail.Expr, tail.Env, tail.K
 	}
 	return x
-}
-
-var top = &Continuation{
-	func(args *VPair) *Tail {
-		return &Tail{args.Car, nil, nil}
-	},
-}
-
-func Eval(x interface{}) interface{} {
-	return eval_rec(x, lib.Standard, top)
 }

@@ -68,18 +68,7 @@ type Combiner struct {
 
 func (c *Combiner) Call(_ Evaller, denv *Environment, k *Continuation, args *VPair) *Tail {
 	arg_map := match_args(c.Formals, args)
-	arg_map[c.Dsym] = &Applicative{
-		func(_ Callable, _ Evaller, ce *Environment, ck *Continuation, cargs *VPair) *Tail {
-			fmt.Printf("Env args: %s\n", cargs)
-			if cargs == nil {
-				return &Tail{VNil, ce, ck}
-			}
-			return &Tail{cargs.Car, ce, &Continuation{
-				func(v *VPair) *Tail { return denv.Call(nil, ce, ck, v) },
-			}}
-		},
-		denv,
-	}
+	arg_map[c.Dsym] = WrapEnv(denv)
 	return &Tail{c.Body, NewEnv(c.Cenv, arg_map), k}
 }
 
@@ -98,4 +87,10 @@ func (a *Applicative) Call(eval Evaller, denv *Environment, k *Continuation, arg
 
 func (a *Applicative) String() string {
 	return fmt.Sprintf("<applicative: %s>", a.Internal)
+}
+
+var Top = &Continuation{
+	func(args *VPair) *Tail {
+		return &Tail{args.Car, nil, nil}
+	},
 }

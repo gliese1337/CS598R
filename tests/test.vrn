@@ -1,0 +1,9 @@
+(import "src/prelude.vrn")
+
+(cur-env)
+(car (qcons a b))
+(qcar (cons a b))
+(car (cons #t #f))
+(last car cdr cons)
+(seq car cdr cons)
+(bind/cc k (seq #t (k #f) car cdr))

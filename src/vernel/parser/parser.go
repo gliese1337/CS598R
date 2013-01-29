@@ -47,8 +47,13 @@ func parse(l *lexer.Lexer) (interface{}, bool) {
 	switch token.Type {
 	case "symbol":
 		return VSym(token.Token), true
+	case "string":
+		return VStr(token.Token), true
 	case "special":
 		return parse_special(token.Token), true
+	case ";":
+		parse(l)
+		return parse(l)
 	case "EOF":
 		return nil, false
 	case "(":

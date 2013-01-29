@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"vernel/lib"
 	"vernel/eval"
+	"vernel/types"
 	"vernel/parser"
 )
 
@@ -38,9 +40,10 @@ func main() {
 		}
 		close(inchan)
 	}()
+	env := lib.GetBuiltins()
 	for expr := range parser.Parse(inchan) {
 		fmt.Printf("%s ->\n", expr)
-		val := eval.Eval(expr)
+		val := eval.Eval(expr, env, types.Top)
 		fmt.Printf("\t%s\n\n", val)
 	}
 }

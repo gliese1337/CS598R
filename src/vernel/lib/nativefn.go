@@ -1,7 +1,155 @@
 package lib
 
-import . "vernel/types"
-import "fmt"
+import (
+	. "vernel/types"
+	"vernel/parser"
+	"fmt"
+	"os"
+	"bufio"
+)
+
+func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil { panic("No arguments to qand") }
+	for x != nil {
+		b, ok := x.Car.(VBool)
+		if !ok {
+			panic("Non-boolean argument to qand")
+		}
+		if !bool(b) {
+			return k.Fn(&VPair{b,VNil})
+		}
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr,VNil}
+		}
+	}
+	return k.Fn(&VPair{VBool(true),VNil})
+}
+
+func qor(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil { panic("No arguments to qor") }
+	for x != nil {
+		b, ok := x.Car.(VBool)
+		if !ok {
+			panic("Non-boolean argument to qor")
+		}
+		if bool(b) {
+			return k.Fn(&VPair{b,VNil})
+		}
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr,VNil}
+		}
+	}
+	return k.Fn(&VPair{VBool(false),VNil})
+}
+
+func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil { panic("No arguments to qeq") }
+	var ret bool
+	for {
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			if cdr == nil {
+				ret = true
+				break
+			}
+			if x.Car != cdr.Car {
+				ret = false
+				break
+			}
+			x = cdr
+		} else {
+			ret = x.Car == cdr
+			break
+		}
+	}
+	return k.Fn(&VPair{VBool(ret),VNil})
+}
+
+func qread(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		return k.Fn(&VPair{VNil,VNil})
+	}
+	inchan := make(chan rune)
+	go func() {
+		for x != nil {
+			vstr, ok := x.Car.(VStr)
+			if !ok {
+				panic("Non-string argument to read")
+			}
+			for _, r := range string(vstr) {
+				inchan <- r
+			}
+		}
+		close(inchan)
+	}()
+	var rootpair = VPair{nil,nil}
+	curpair := &rootpair
+	for expr := range parser.Parse(inchan) {
+		nextpair := &VPair{expr,VNil}
+		curpair.Cdr = nextpair
+		curpair = nextpair
+	}
+	return k.Fn(&VPair{rootpair.Cdr,VNil})
+}
+
+func load_env(eval Evaller, env *Environment, fname string) {
+	file, err := os.Open(fname)
+	if err != nil {
+		panic("Error opening file.")
+	}
+	defer file.Close()
+	
+	inchan := make(chan rune)
+	go func() {
+		freader := bufio.NewReader(file)
+	loop:
+		if r, _, err := freader.ReadRune(); err == nil {
+			inchan <- r
+			goto loop
+		}
+		close(inchan)
+	}()
+	for expr := range parser.Parse(inchan) {
+		eval(expr, env, Top)
+	}
+}
+
+func use(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil { panic("No arguments to use") }
+	vstr, ok := x.Car.(VStr)
+	if !ok { panic("Non-string argument to use") }
+	body, ok := x.Cdr.(*VPair)
+	if !ok { panic("Missing body expression in use") }
+	env := GetBuiltins()
+	load_env(eval, env, string(vstr))
+	return &Tail{body.Car,env,k}
+}
+
+func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
+	for x != nil {
+		vstr, ok := x.Car.(VStr)
+		if !ok { panic(pstr) }
+		load_env(eval, env, string(vstr))
+		x, ok = x.Cdr.(*VPair)
+	}
+}
+
+func load(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	env := GetBuiltins()
+	loader(eval, env, x, "Non-string argument to load")
+	return k.Fn(&VPair{WrapEnv(env),VNil})
+}
+
+func qimport(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+	loader(eval, env, x, "Non-string argument to import")
+	return k.Fn(&VPair{VNil,VNil})
+}
 
 func bindcc(_ Evaller, senv *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil {

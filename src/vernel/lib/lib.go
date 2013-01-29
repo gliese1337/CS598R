@@ -2,7 +2,8 @@ package lib
 
 import . "vernel/types"
 
-var Standard = NewEnv(
+func GetBuiltins() *Environment {
+	return NewEnv(
 	nil,
 	map[VSym]interface{}{
 		VSym("def"):      &NativeFn{def},
@@ -16,4 +17,12 @@ var Standard = NewEnv(
 		VSym("qprint"):   &NativeFn{qprint},
 		VSym("last"):     &NativeFn{last},
 		VSym("qlist"):    &NativeFn{qlist},
+		VSym("use"):    &NativeFn{use},
+		VSym("load"):    &NativeFn{load},
+		VSym("import"):    &NativeFn{qimport},
+		VSym("qread"):    &NativeFn{qread},
+		VSym("qeq?"):    &NativeFn{qeq},
+		VSym("qand"):    &NativeFn{qand},
+		VSym("qor"):    &NativeFn{qor},
 	})
+}
