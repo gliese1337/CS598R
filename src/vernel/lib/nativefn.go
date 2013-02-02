@@ -6,7 +6,26 @@ import (
 	"fmt"
 	"os"
 	"bufio"
+	"time"
 )
+
+func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("No arguments to timer.")
+	}
+	label, ok := x.Car.(VStr)
+	if !ok {
+		panic("Invalid timer label.")
+	}
+	expr, ok := x.Cdr.(*VPair)
+	if !ok || expr == nil {
+		panic("Invalid timer expression.")
+	}
+	start := time.Now()
+	val := eval(expr.Car,env,Top)
+	fmt.Printf("%s ran in %v.\n", label, time.Now().Sub(start))
+	return k.Fn(&VPair{val,VNil})
+}
 
 func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil { panic("No arguments to qand") }

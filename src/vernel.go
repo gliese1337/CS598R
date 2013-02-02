@@ -4,26 +4,55 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"flag"
+	"runtime"
+	"runtime/pprof"
 	"vernel/lib"
 	"vernel/eval"
 	"vernel/types"
 	"vernel/parser"
 )
 
+var cpuprofile = flag.String("cpu", "", "save cpu profile")
+var memprofile = flag.String("mem", "", "save memory profile")
+var srcfile = flag.String("f", "", "program file")
+
 func main() {
 	var file *os.File
-	if len(os.Args) < 2 {
-		file = os.Stdin
-	} else {
-		var err error
-		file, err = os.Open(os.Args[1])
+	runtime.MemProfileRate = 1
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	flag.Parse()
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
 		if err != nil {
-			fmt.Printf("Error opening file.\n")
+			fmt.Printf("Error creating memory log file.\n")
+			return
+		}
+		defer func(){
+			pprof.WriteHeapProfile(f)
+			f.Close()
+		}()
+	}
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Printf("Error creating cpu log file.\n")
+			return
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+	if *srcfile != "" {
+		var err error
+		file, err = os.Open(*srcfile)
+		if err != nil {
+			fmt.Printf("Error opening source file.\n")
 			return
 		}
 		defer file.Close()
+	}else{
+		file = os.Stdin
 	}
-
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Printf("Error: %s\n", err)
@@ -42,8 +71,6 @@ func main() {
 	}()
 	env := lib.GetBuiltins()
 	for expr := range parser.Parse(inchan) {
-		fmt.Printf("%s ->\n", expr)
-		val := eval.Eval(expr, env, types.Top)
-		fmt.Printf("\t%s\n\n", val)
+		eval.Eval(expr, env, types.Top)
 	}
 }

@@ -24,5 +24,6 @@ func GetBuiltins() *Environment {
 		VSym("qeq?"):    &NativeFn{qeq},
 		VSym("qand"):    &NativeFn{qand},
 		VSym("qor"):    &NativeFn{qor},
+		VSym("timer"):	&NativeFn{timer},
 	})
 }
