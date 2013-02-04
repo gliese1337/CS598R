@@ -1,3 +1,4 @@
+(def q (vau (a) % a))
 (def cons (wrap/rtl qcons))
 (def car (wrap/rtl qcar))
 (def cdr (wrap/rtl qcdr))
@@ -16,3 +17,31 @@
 (def qxor (vau (a b) % (a (b #f #t) (b #t #f))))
 (def ^ (wrap/rtl qxor))
 (def call/cc (vau (fn) % (bind/cc k (fn k))))
+(def * (wrap/rtl '*))
+(def / (wrap/rtl '/))
+(def + (wrap/rtl '+))
+(def - (wrap/rtl '-))
+(def sym? (wrap/rtl qsym?))
+(def str? (wrap/rtl qstr?))
+(def bool? (wrap/rtl qbool?))
+(def num? (wrap/rtl qnum?))
+(def pair? (wrap/rtl qpair?))
+(def qnot (vau (a) % (a #f #t)))
+(def not (wrap/rtl qnot))
+(def fn/rtl
+	(vau (args sym body) %
+		(wrap/rtl (% (list vau args sym body)))))
+(def '@ (vau (p args) %
+	(% (cons (unwrap p) args))))
+(def @/rtl (wrap/rtl '@))
+(def qcall (vau (p . args) %
+	(% (cons p args))))
+(def call/rtl (wrap/rtl qcall))
+(def check (vau (a b name) % (seq
+	(def va (% a))
+	(def vb (% b))
+	((eq? va vb)
+		(print "Passed " name "
+")
+		(print "Failed " name ": " a " = " va ", not " vb "
+")))))

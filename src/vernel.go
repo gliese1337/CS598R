@@ -2,15 +2,15 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
-	"flag"
 	"runtime"
 	"runtime/pprof"
-	"vernel/lib"
 	"vernel/eval"
-	"vernel/types"
+	"vernel/lib"
 	"vernel/parser"
+	"vernel/types"
 )
 
 var cpuprofile = flag.String("cpu", "", "save cpu profile")
@@ -28,7 +28,7 @@ func main() {
 			fmt.Printf("Error creating memory log file.\n")
 			return
 		}
-		defer func(){
+		defer func() {
 			pprof.WriteHeapProfile(f)
 			f.Close()
 		}()
@@ -50,7 +50,7 @@ func main() {
 			return
 		}
 		defer file.Close()
-	}else{
+	} else {
 		file = os.Stdin
 	}
 	defer func() {
@@ -72,5 +72,6 @@ func main() {
 	env := lib.GetBuiltins()
 	for expr := range parser.Parse(inchan) {
 		eval.Eval(expr, env, types.Top)
+		//	fmt.Printf("%s\n", val)
 	}
 }

@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 )
 
 type Tail struct {
@@ -26,8 +27,22 @@ func (v VSym) String() string {
 type VStr string
 
 func (v VStr) String() string {
-	return "\""+string(v)+"\""
+	return string(v)
 }
+
+type VNum float64
+
+func (v VNum) String() string {
+	return strconv.FormatFloat(float64(v), 'g', -1, 64)
+}
+
+/*
+func (v VNum) Call(eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
+	//TODO: Make numbers look like church numerals
+	//Short cut- exponentiatiate if the arg is another number
+	//Does anything else make sense for non-integers?
+}
+*/
 
 type VBool bool
 
@@ -40,7 +55,7 @@ func (v VBool) String() string {
 
 func (v VBool) Call(eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
 	if args == nil {
-		return &Tail{VNil, env, k}
+		return k.Fn(&VPair{VNil, VNil})
 	}
 	cdr, ok := args.Cdr.(*VPair)
 	if !ok || cdr == nil {

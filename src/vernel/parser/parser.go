@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 	"vernel/lexer"
 	. "vernel/types"
 )
@@ -49,6 +50,12 @@ func parse(l *lexer.Lexer) (interface{}, bool) {
 		return VSym(token.Token), true
 	case "string":
 		return VStr(token.Token), true
+	case "number":
+		num, err := strconv.ParseFloat(token.Token, 64)
+		if err != nil {
+			panic(fmt.Sprintf("Invalid Number \"%s\"", token.Token))
+		}
+		return VNum(num), true
 	case "special":
 		return parse_special(token.Token), true
 	case ";":

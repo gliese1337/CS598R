@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"fmt"
 	. "vernel/types"
 )
 
@@ -27,7 +28,7 @@ func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
 			if xt != nil {
 				arglist, ok := xt.Cdr.(*VPair)
 				if !ok {
-					panic("Non-list in argument position")
+					panic(fmt.Sprintf("Non-list \"%s\" in argument position", xt.Cdr))
 				}
 				x, k = xt.Car, proc_k(env, k, arglist)
 				continue

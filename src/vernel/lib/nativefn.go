@@ -1,12 +1,12 @@
 package lib
 
 import (
-	. "vernel/types"
-	"vernel/parser"
+	"bufio"
 	"fmt"
 	"os"
-	"bufio"
 	"time"
+	"vernel/parser"
+	. "vernel/types"
 )
 
 func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
@@ -22,53 +22,69 @@ func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 		panic("Invalid timer expression.")
 	}
 	start := time.Now()
-	val := eval(expr.Car,env,Top)
+	val := eval(expr.Car, env, Top)
 	fmt.Printf("%s ran in %v.\n", label, time.Now().Sub(start))
-	return k.Fn(&VPair{val,VNil})
+	return k.Fn(&VPair{val, VNil})
 }
 
 func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
-	if x == nil { panic("No arguments to qand") }
+	if x == nil {
+		panic("No arguments to qand")
+	}
 	for x != nil {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qand")
 		}
 		if !bool(b) {
-			return k.Fn(&VPair{b,VNil})
+			return k.Fn(&VPair{b, VNil})
 		}
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
 			x = cdr
 		} else {
-			x = &VPair{cdr,VNil}
+			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VBool(true),VNil})
+	return k.Fn(&VPair{VBool(true), VNil})
 }
 
 func qor(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
-	if x == nil { panic("No arguments to qor") }
+	if x == nil {
+		panic("No arguments to qor")
+	}
 	for x != nil {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qor")
 		}
 		if bool(b) {
-			return k.Fn(&VPair{b,VNil})
+			return k.Fn(&VPair{b, VNil})
 		}
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
 			x = cdr
 		} else {
-			x = &VPair{cdr,VNil}
+			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VBool(false),VNil})
+	return k.Fn(&VPair{VBool(false), VNil})
+}
+
+func equal(a interface{}, b interface{}) bool {
+	if at, ok := a.(*VPair); ok {
+		if bt, ok := b.(*VPair); ok {
+			return equal(at.Car, bt.Car) && equal(at.Cdr, bt.Cdr)
+		}
+		return false
+	}
+	return a == b
 }
 
 func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
-	if x == nil { panic("No arguments to qeq") }
+	if x == nil {
+		panic("No arguments to qeq")
+	}
 	var ret bool
 	for {
 		cdr, ok := x.Cdr.(*VPair)
@@ -77,7 +93,7 @@ func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 				ret = true
 				break
 			}
-			if x.Car != cdr.Car {
+			if !equal(x.Car, cdr.Car) {
 				ret = false
 				break
 			}
@@ -87,12 +103,133 @@ func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			break
 		}
 	}
-	return k.Fn(&VPair{VBool(ret),VNil})
+	return k.Fn(&VPair{VBool(ret), VNil})
+}
+
+func qmul(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("No arguments to qmul")
+	}
+	var ret float64 = 1
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qmul")
+		}
+		ret *= float64(b)
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	return k.Fn(&VPair{VNum(ret), VNil})
+}
+
+func qdiv(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("No arguments to qdiv")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qdiv")
+	}
+	ret := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qmul")
+		}
+		ret /= float64(b)
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	return k.Fn(&VPair{VNum(ret), VNil})
+}
+
+func qadd(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("No arguments to qadd")
+	}
+	var ret float64 = 0
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qadd")
+		}
+		ret += float64(b)
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	return k.Fn(&VPair{VNum(ret), VNil})
+}
+
+func qsub(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("No arguments to qsub")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qsub")
+	}
+	ret := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qsub")
+		}
+		ret -= float64(b)
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	return k.Fn(&VPair{VNum(ret), VNil})
+}
+
+func qisbool(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	_, ok := x.Car.(VBool)
+	return k.Fn(&VPair{VBool(ok), VNil})
+}
+func qisnum(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	_, ok := x.Car.(VNum)
+	return k.Fn(&VPair{VBool(ok), VNil})
+}
+func qispair(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	_, ok := x.Car.(*VPair)
+	return k.Fn(&VPair{VBool(ok), VNil})
+}
+func qisstr(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	_, ok := x.Car.(VStr)
+	return k.Fn(&VPair{VBool(ok), VNil})
+}
+func qissym(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+	_, ok := x.Car.(VSym)
+	return k.Fn(&VPair{VBool(ok), VNil})
 }
 
 func qread(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil {
-		return k.Fn(&VPair{VNil,VNil})
+		return k.Fn(&VPair{VNil, VNil})
 	}
 	inchan := make(chan rune)
 	go func() {
@@ -107,14 +244,14 @@ func qread(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		}
 		close(inchan)
 	}()
-	var rootpair = VPair{nil,nil}
+	var rootpair = VPair{nil, nil}
 	curpair := &rootpair
 	for expr := range parser.Parse(inchan) {
-		nextpair := &VPair{expr,VNil}
+		nextpair := &VPair{expr, VNil}
 		curpair.Cdr = nextpair
 		curpair = nextpair
 	}
-	return k.Fn(&VPair{rootpair.Cdr,VNil})
+	return k.Fn(&VPair{rootpair.Cdr, VNil})
 }
 
 func load_env(eval Evaller, env *Environment, fname string) {
@@ -123,7 +260,7 @@ func load_env(eval Evaller, env *Environment, fname string) {
 		panic("Error opening file.")
 	}
 	defer file.Close()
-	
+
 	inchan := make(chan rune)
 	go func() {
 		freader := bufio.NewReader(file)
@@ -140,20 +277,28 @@ func load_env(eval Evaller, env *Environment, fname string) {
 }
 
 func use(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
-	if x == nil { panic("No arguments to use") }
+	if x == nil {
+		panic("No arguments to use")
+	}
 	vstr, ok := x.Car.(VStr)
-	if !ok { panic("Non-string argument to use") }
+	if !ok {
+		panic("Non-string argument to use")
+	}
 	body, ok := x.Cdr.(*VPair)
-	if !ok { panic("Missing body expression in use") }
+	if !ok {
+		panic("Missing body expression in use")
+	}
 	env := GetBuiltins()
 	load_env(eval, env, string(vstr))
-	return &Tail{body.Car,env,k}
+	return &Tail{body.Car, env, k}
 }
 
 func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
 	for x != nil {
 		vstr, ok := x.Car.(VStr)
-		if !ok { panic(pstr) }
+		if !ok {
+			panic(pstr)
+		}
 		load_env(eval, env, string(vstr))
 		x, ok = x.Cdr.(*VPair)
 	}
@@ -162,12 +307,12 @@ func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
 func load(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	env := GetBuiltins()
 	loader(eval, env, x, "Non-string argument to load")
-	return k.Fn(&VPair{WrapEnv(env),VNil})
+	return k.Fn(&VPair{WrapEnv(env), VNil})
 }
 
 func qimport(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 	loader(eval, env, x, "Non-string argument to import")
-	return k.Fn(&VPair{VNil,VNil})
+	return k.Fn(&VPair{VNil, VNil})
 }
 
 func bindcc(_ Evaller, senv *Environment, k *Continuation, x *VPair) *Tail {
@@ -237,7 +382,7 @@ func last(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	for ; x != nil; x = nx {
 		if nx, ok = x.Cdr.(*VPair); ok {
 			if nx == nil {
-				return k.Fn(&VPair{x, VNil})
+				return k.Fn(&VPair{x.Car, VNil})
 			}
 		} else {
 			panic("Invalid Argument List")
@@ -277,12 +422,9 @@ func def(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 }
 
 func qprint(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
-	var val interface{}
-	if x == nil {
-		val = VNil
-	} else {
-		val = x.Car
+	for x != nil {
+		fmt.Printf("%s", x.Car)
+		x, _ = x.Cdr.(*VPair)
 	}
-	fmt.Printf("%s", val)
-	return &Tail{val, env, k}
+	return k.Fn(&VPair{VNil, VNil})
 }
