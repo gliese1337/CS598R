@@ -9,6 +9,13 @@ import (
 	. "vernel/types"
 )
 
+func vpanic(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+	if x == nil {
+		panic("Runtime Error")
+	}
+	panic(x.Car)
+}
+
 func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 	if x == nil {
 		panic("No arguments to timer.")
@@ -23,7 +30,7 @@ func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 	}
 	start := time.Now()
 	val := eval(expr.Car, env, Top)
-	fmt.Printf("%s ran in %v.\n", label, time.Now().Sub(start))
+	fmt.Printf("%s ran in %v.\n", label, time.Since(start))
 	return k.Fn(&VPair{val, VNil})
 }
 
@@ -86,7 +93,7 @@ func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		panic("No arguments to qeq")
 	}
 	var ret bool
-	for {
+	for { 
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
 			if cdr == nil {

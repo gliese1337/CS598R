@@ -10,7 +10,7 @@
 (def new-env (vau () % (cur-env)))
 (def read (wrap/rtl qread))
 (def eq? (wrap/rtl qeq?))
-(def qnil? (vau (a) % (eq? a)))
+(def qnil? (vau (a) % (eq? a ())))
 (def nil? (wrap/rtl qnil?))
 (def & (wrap/rtl qand))
 (def | (wrap/rtl qor))
@@ -45,3 +45,12 @@
 ")
 		(print "Failed " name ": " a " = " va ", not " vb "
 ")))))
+(def cond (vau opts eval
+	((nil? opts) ()
+		(seq
+			(def opt (car opts))
+			(def test (eval (car opt)))
+			((bool? test)
+				(test (eval (car (cdr opt)))
+					(cond (cdr opts)))
+				(panic "Non-boolean condition"))))))

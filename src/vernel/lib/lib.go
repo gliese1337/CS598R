@@ -34,5 +34,6 @@ func GetBuiltins() *Environment {
 			VSym("qsym?"):    &NativeFn{qissym},
 			VSym("qpair?"):   &NativeFn{qispair},
 			VSym("timer"):    &NativeFn{timer},
+			VSym("panic"):    &NativeFn{vpanic},
 		})
 }

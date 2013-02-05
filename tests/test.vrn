@@ -8,3 +8,14 @@
 (check (bind/cc k (seq #t (k #f) car cdr)) #f "'bind/cc' test")
 (check (@/rtl cons (q (a b))) (q (a . b)) "@ test")
 (check (call/rtl qcons (q a) (q b)) (q ( a . b)) "call test")
+(print (nil? ()))
+(check (cond
+	(#t "result"))
+	"result"
+	"cond test 1")
+(check (cond
+	(#f "hello")
+	((nil? 5) "yo")
+	(#t "result"))
+	"result"
+	"cond test 2")
