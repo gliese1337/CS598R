@@ -2,7 +2,7 @@ package lib
 
 import . "vernel/types"
 
-func vau(_ Evaller, cenv *Environment, k *Continuation, x *VPair) *Tail {
+func vau(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Arguments to vau")
 	}
@@ -23,71 +23,67 @@ func vau(_ Evaller, cenv *Environment, k *Continuation, x *VPair) *Tail {
 	if rest == nil || !ok {
 		panic("Missing Vau Expression Body")
 	}
-	return k.Fn(&VPair{&Combiner{
-		Cenv:    cenv,
+	ctx.Expr = &Combiner{
+		Cenv:    ctx.Env,
 		Formals: x.Car,
 		Dsym:    dsym,
 		Body:    rest.Car,
-	}, VNil})
+	}
 }
 
-func rtlWrapper(internal Callable, eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
+func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) {
 	/*map arglist with eval function*/
 	if args == nil {
-		return internal.Call(eval, env, k, VNil)
+		internal.Call(eval, ctx, VNil)
+		return
 	}
-
-	argv := &VPair{nil, VNil}
-
-	var map_loop func(*VPair, *VPair) *Tail
-	map_loop = func(oa *VPair, na *VPair) *Tail {
-		ccall := false
-		return &Tail{oa.Car, env, &Continuation{func(va *VPair) *Tail {
-			if !ccall {
-				ccall = true
-				na.Car = va.Car
-				if next_arg, ok := oa.Cdr.(*VPair); ok {
-					if next_arg == nil {
-						na.Cdr = VNil
-						return internal.Call(eval, env, k, argv)
-					}
-					next_slot := &VPair{nil, nil}
-					na.Cdr = next_slot
-					return map_loop(next_arg, next_slot)
+	senv, sk := ctx.Env, ctx.K
+	argv := VPair{nil, VNil}
+	var mloop func(*Tail, *VPair, *VPair)
+	mloop = func(kctx *Tail, oa *VPair, na *VPair) {
+		kctx.Expr = oa.Car
+		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) {
+			na.Car = va.Car
+			if next_arg, ok := oa.Cdr.(*VPair); ok {
+				if next_arg == nil {
+					nctx.Env, nctx.K = senv, sk
+					internal.Call(eval, ctx, &argv)
 				} else {
-					panic("Invalid Argument List")
+					next_slot := &VPair{nil, VNil}
+					na.Cdr = next_slot
+					mloop(nctx, next_arg, next_slot)
 				}
+			} else {
+				panic("Invalid Argument List")
 			}
-			panic("Continuation Activation Not Implemented")
-			nargv := argv
-			return internal.Call(eval, env, k, nargv)
-		}}}
+		}}
 	}
-	return map_loop(args, argv)
+	mloop(ctx, args, &argv)
 }
 
-func wrap_gen(fn func(Callable, Evaller, *Environment, *Continuation, *VPair) *Tail) Callable {
-	return &NativeFn{func(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair)) Callable {
+	return &NativeFn{"wrapper", func(eval Evaller, ctx *Tail, x *VPair) {
 		if x == nil {
 			panic("No Argument to wrap")
 		}
-		return &Tail{x.Car, env, &Continuation{func(v *VPair) *Tail {
+		sk := ctx.K
+		ctx.Expr, ctx.K = x.Car, &Continuation{"wrapped", func(nctx *Tail, v *VPair) {
 			if proc, ok := v.Car.(Callable); ok {
-				return k.Fn(&VPair{&Applicative{fn, proc}, VNil})
+				sk.Fn(nctx, &VPair{&Applicative{fn, proc}, VNil})
+			} else {
+				panic("Non-callable passed to wrap")
 			}
-			panic("Non-callable passed to wrap")
-		}}}
+		}}
 	}}
 }
 
-func unwrap(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func qunwrap(eval Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Arguments unwrap")
 	}
-	return &Tail{x.Car, env, &Continuation{func(v *VPair) *Tail {
-		if arg, ok := v.Car.(*Applicative); ok {
-			return k.Fn(&VPair{arg.Internal, VNil})
-		}
+	if arg, ok := x.Car.(*Applicative); ok {
+		ctx.Return(&VPair{arg.Internal, VNil})
+	} else {
 		panic("Can't unwrap non-applicative")
-	}}}
+	}
 }

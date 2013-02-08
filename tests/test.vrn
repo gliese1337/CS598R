@@ -1,21 +1,31 @@
 (import "tests/prelude.vrn")
 
-(check (car (qcons a b)) (q a) "'car'/'qcons' test")
+(check (car (qcons a b)) (q a) "'car'/'qcons' test 1")
+(check (car (qcons (a b) c)) (q (a b)) "'car'/'qcons' test 2")
+(check (cdr (qcons a (b c))) (q (b c)) "'car'/'qcons' test 3")
 (check (qcar (cons a b)) (q cons) "'qcar'/'cons' test")
 (check (car (cons #t #f)) #t "'car'/'cons' test")
+(check (cdr (cons #t #f)) #f "'cdr'/'cons' test")
 (check (last car cdr cons) (q cons) "'last' test")
 (check (seq car cdr cons) cons "'seq' test")
 (check (bind/cc k (seq #t (k #f) car cdr)) #f "'bind/cc' test")
 (check (@/rtl cons (q (a b))) (q (a . b)) "@ test")
 (check (call/rtl qcons (q a) (q b)) (q ( a . b)) "call test")
-(print (nil? ()))
-(check (cond
-	(#t "result"))
+(def var (vau (a . b) % b))
+(check (var a b c d) (qlist b c d) "variadic test 1")
+(check (call/rtl var 1 2 3 4) (qlist 2 3 4) "variadic test 2")
+(check (cond) () "empty cond")
+(check (cond (#t "result"))
 	"result"
 	"cond test 1")
 (check (cond
+	(#f "false")
+	(#t "true"))
+	"true"
+	"cond test 2")
+(check (cond
 	(#f "hello")
 	((nil? 5) "yo")
-	(#t "result"))
+	((car (qlist #t #f)) "result"))
 	"result"
-	"cond test 2")
+	"cond test 3")

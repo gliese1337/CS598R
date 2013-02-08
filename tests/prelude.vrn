@@ -2,6 +2,7 @@
 (def cons (wrap/rtl qcons))
 (def car (wrap/rtl qcar))
 (def cdr (wrap/rtl qcdr))
+(def list/rtl (wrap/rtl qlist))
 (def seq (wrap/rtl last))
 (def print (wrap/rtl qprint))
 (def qns (vau (e b) % (e b)))
@@ -30,12 +31,13 @@
 (def not (wrap/rtl qnot))
 (def fn/rtl
 	(vau (args sym body) %
-		(wrap/rtl (% (list vau args sym body)))))
+		(wrap/rtl (% (list/rtl vau args sym body)))))
+(def unwrap (wrap/rtl qunwrap))
 (def '@ (vau (p args) %
 	(% (cons (unwrap p) args))))
 (def @/rtl (wrap/rtl '@))
-(def qcall (vau (p . args) %
-	(% (cons p args))))
+(def qcall (vau (p . args) % (seq
+	(% (cons p args)))))
 (def call/rtl (wrap/rtl qcall))
 (def check (vau (a b name) % (seq
 	(def va (% a))
@@ -51,6 +53,7 @@
 			(def opt (car opts))
 			(def test (eval (car opt)))
 			((bool? test)
-				(test (eval (car (cdr opt)))
-					(cond (cdr opts)))
+				(eval (test
+					(car (cdr opt))
+					(cons cond (cdr opts))))
 				(panic "Non-boolean condition"))))))

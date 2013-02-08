@@ -2,15 +2,20 @@ package eval
 
 import (
 	"fmt"
+	//"runtime"
 	. "vernel/types"
 )
 
-func proc_k(env *Environment, k *Continuation, args *VPair) *Continuation {
+func proc_k(sctx Tail, args *VPair) *Continuation {
 	return &Continuation{
-		func(p *VPair) *Tail {
+		"call",
+		func(nctx *Tail, p *VPair) {
 			if p != nil {
 				if proc, ok := p.Car.(Callable); ok {
-					return proc.Call(Eval, env, k, args)
+					//fmt.Printf("Calling %v with arguments %v\n", proc, args)
+					*nctx = sctx
+					proc.Call(Eval, nctx, args)
+					return
 				}
 			}
 			panic("Non-callable in function position")
@@ -20,22 +25,25 @@ func proc_k(env *Environment, k *Continuation, args *VPair) *Continuation {
 }
 
 func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
-	for k != nil {
-		switch xt := x.(type) {
+	state := Tail{x, env, k}
+	//_, f, l, _ := runtime.Caller(1)
+	//fmt.Printf("Eval called from %v:%v\n", f, l)
+	for state.K != nil {
+		switch xt := state.Expr.(type) {
 		case VSym:
-			x = env.Get(xt)
+			state.Expr = state.Env.Get(xt)
 		case *VPair:
 			if xt != nil {
 				arglist, ok := xt.Cdr.(*VPair)
 				if !ok {
 					panic(fmt.Sprintf("Non-list \"%s\" in argument position", xt.Cdr))
 				}
-				x, k = xt.Car, proc_k(env, k, arglist)
+				//fmt.Printf("Evaluating procedure expression: %v\n", xt.Car)
+				state.Expr, state.K = xt.Car, proc_k(state, arglist)
 				continue
 			}
 		}
-		tail := k.Fn(&VPair{x, VNil})
-		x, env, k = tail.Expr, tail.Env, tail.K
+		(&state).Return(&VPair{state.Expr, VNil})
 	}
-	return x
+	return state.Expr
 }

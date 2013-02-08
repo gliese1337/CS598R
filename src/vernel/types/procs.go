@@ -3,27 +3,36 @@ package types
 import "fmt"
 
 type Continuation struct {
-	Fn func(*VPair) *Tail
+	Name string
+	Fn   func(*Tail, *VPair)
 }
 
-func (k *Continuation) Call(_ Evaller, _ *Environment, _ *Continuation, x *VPair) *Tail {
-	return k.Fn(x)
+func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) {
+	k.Fn(ctx, x)
 }
 
 func (k *Continuation) String() string {
-	return "<cont>"
+	return fmt.Sprintf("<cont:%s>", k.Name)
+}
+
+var Top = &Continuation{
+	"Top",
+	func(ctx *Tail, args *VPair) {
+		ctx.Expr, ctx.K = args.Car, nil
+	},
 }
 
 type NativeFn struct {
-	Fn func(Evaller, *Environment, *Continuation, *VPair) *Tail
+	Name string
+	Fn   func(Evaller, *Tail, *VPair)
 }
 
-func (nfn *NativeFn) Call(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
-	return nfn.Fn(eval, env, k, x)
+func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) {
+	nfn.Fn(eval, ctx, x)
 }
 
 func (nfn *NativeFn) String() string {
-	return "<native>"
+	return fmt.Sprintf("<native:%s>", nfn.Name)
 }
 
 func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
@@ -66,10 +75,10 @@ type Combiner struct {
 	Body    interface{}
 }
 
-func (c *Combiner) Call(_ Evaller, denv *Environment, k *Continuation, args *VPair) *Tail {
+func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) {
 	arg_map := match_args(c.Formals, args)
-	arg_map[c.Dsym] = WrapEnv(denv)
-	return &Tail{c.Body, NewEnv(c.Cenv, arg_map), k}
+	arg_map[c.Dsym] = WrapEnv(ctx.Env)
+	ctx.Expr, ctx.Env = c.Body, NewEnv(c.Cenv, arg_map)
 }
 
 func (c *Combiner) String() string {
@@ -77,20 +86,17 @@ func (c *Combiner) String() string {
 }
 
 type Applicative struct {
-	Wrapper  func(Callable, Evaller, *Environment, *Continuation, *VPair) *Tail
+	Wrapper  func(Callable, Evaller, *Tail, *VPair)
 	Internal Callable
 }
 
-func (a *Applicative) Call(eval Evaller, denv *Environment, k *Continuation, args *VPair) *Tail {
-	return a.Wrapper(a.Internal, eval, denv, k, args)
+func (a *Applicative) Call(eval Evaller, ctx *Tail, args *VPair) {
+	a.Wrapper(a.Internal, eval, ctx, args)
 }
 
 func (a *Applicative) String() string {
+	if _, ok := a.Internal.(*Environment); ok {
+		return "<applicative: Env>"
+	}
 	return fmt.Sprintf("<applicative: %s>", a.Internal)
-}
-
-var Top = &Continuation{
-	func(args *VPair) *Tail {
-		return &Tail{args.Car, nil, nil}
-	},
 }

@@ -71,7 +71,8 @@ func main() {
 	}()
 	env := lib.GetBuiltins()
 	for expr := range parser.Parse(inchan) {
+		//fmt.Printf("%s ->\n", expr)
 		eval.Eval(expr, env, types.Top)
-		//	fmt.Printf("%s\n", val)
+		//fmt.Printf("\t%s\n", val)
 	}
 }

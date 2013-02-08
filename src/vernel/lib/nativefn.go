@@ -9,14 +9,14 @@ import (
 	. "vernel/types"
 )
 
-func vpanic(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func vpanic(_ Evaller, _ *Tail, x *VPair) {
 	if x == nil {
 		panic("Runtime Error")
 	}
 	panic(x.Car)
 }
 
-func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func timer(eval Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to timer.")
 	}
@@ -29,12 +29,12 @@ func timer(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 		panic("Invalid timer expression.")
 	}
 	start := time.Now()
-	val := eval(expr.Car, env, Top)
+	val := eval(expr.Car, ctx.Env, Top)
 	fmt.Printf("%s ran in %v.\n", label, time.Since(start))
-	return k.Fn(&VPair{val, VNil})
+	ctx.Return(&VPair{val, VNil})
 }
 
-func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qand(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qand")
 	}
@@ -44,7 +44,8 @@ func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			panic("Non-boolean argument to qand")
 		}
 		if !bool(b) {
-			return k.Fn(&VPair{b, VNil})
+			ctx.Expr = b
+			return
 		}
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
@@ -53,10 +54,10 @@ func qand(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VBool(true), VNil})
+	ctx.Expr = VBool(true)
 }
 
-func qor(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qor(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qor")
 	}
@@ -66,7 +67,8 @@ func qor(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			panic("Non-boolean argument to qor")
 		}
 		if bool(b) {
-			return k.Fn(&VPair{b, VNil})
+			ctx.Expr = b
+			return
 		}
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
@@ -75,12 +77,12 @@ func qor(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VBool(false), VNil})
+	ctx.Expr = VBool(false)
 }
 
 func equal(a interface{}, b interface{}) bool {
-	if at, ok := a.(*VPair); ok {
-		if bt, ok := b.(*VPair); ok {
+	if at, _ := a.(*VPair); at != nil {
+		if bt, _ := b.(*VPair); bt != nil {
 			return equal(at.Car, bt.Car) && equal(at.Cdr, bt.Cdr)
 		}
 		return false
@@ -88,32 +90,30 @@ func equal(a interface{}, b interface{}) bool {
 	return a == b
 }
 
-func qeq(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qeq(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qeq")
 	}
-	var ret bool
-	for { 
+	for {
 		cdr, ok := x.Cdr.(*VPair)
 		if ok {
 			if cdr == nil {
-				ret = true
+				ctx.Expr = VBool(true)
 				break
 			}
 			if !equal(x.Car, cdr.Car) {
-				ret = false
+				ctx.Expr = VBool(false)
 				break
 			}
 			x = cdr
 		} else {
-			ret = x.Car == cdr
+			ctx.Expr = VBool(x.Car == cdr)
 			break
 		}
 	}
-	return k.Fn(&VPair{VBool(ret), VNil})
 }
 
-func qmul(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qmul(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qmul")
 	}
@@ -131,10 +131,10 @@ func qmul(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VNum(ret), VNil})
+	ctx.Expr = VNum(ret)
 }
 
-func qdiv(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qdiv(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qdiv")
 	}
@@ -160,10 +160,10 @@ func qdiv(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VNum(ret), VNil})
+	ctx.Expr = VNum(ret)
 }
 
-func qadd(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qadd(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qadd")
 	}
@@ -181,10 +181,10 @@ func qadd(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VNum(ret), VNil})
+	ctx.Expr = VNum(ret)
 }
 
-func qsub(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qsub(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to qsub")
 	}
@@ -210,33 +210,34 @@ func qsub(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 			x = &VPair{cdr, VNil}
 		}
 	}
-	return k.Fn(&VPair{VNum(ret), VNil})
+	ctx.Expr = VNum(ret)
 }
 
-func qisbool(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qisbool(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(VBool)
-	return k.Fn(&VPair{VBool(ok), VNil})
+	ctx.Expr = VBool(ok)
 }
-func qisnum(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qisnum(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(VNum)
-	return k.Fn(&VPair{VBool(ok), VNil})
+	ctx.Expr = VBool(ok)
 }
-func qispair(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qispair(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(*VPair)
-	return k.Fn(&VPair{VBool(ok), VNil})
+	ctx.Expr = VBool(ok)
 }
-func qisstr(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qisstr(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(VStr)
-	return k.Fn(&VPair{VBool(ok), VNil})
+	ctx.Expr = VBool(ok)
 }
-func qissym(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qissym(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(VSym)
-	return k.Fn(&VPair{VBool(ok), VNil})
+	ctx.Expr = VBool(ok)
 }
 
-func qread(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qread(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
-		return k.Fn(&VPair{VNil, VNil})
+		ctx.Return(&VPair{VNil, VNil})
+		return
 	}
 	inchan := make(chan rune)
 	go func() {
@@ -258,7 +259,7 @@ func qread(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		curpair.Cdr = nextpair
 		curpair = nextpair
 	}
-	return k.Fn(&VPair{rootpair.Cdr, VNil})
+	ctx.Return(&VPair{rootpair.Cdr, VNil})
 }
 
 func load_env(eval Evaller, env *Environment, fname string) {
@@ -283,7 +284,7 @@ func load_env(eval Evaller, env *Environment, fname string) {
 	}
 }
 
-func use(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func use(eval Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to use")
 	}
@@ -297,7 +298,7 @@ func use(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 	}
 	env := GetBuiltins()
 	load_env(eval, env, string(vstr))
-	return &Tail{body.Car, env, k}
+	ctx.Expr, ctx.Env = body.Car, env
 }
 
 func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
@@ -311,18 +312,18 @@ func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
 	}
 }
 
-func load(eval Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func load(eval Evaller, ctx *Tail, x *VPair) {
 	env := GetBuiltins()
 	loader(eval, env, x, "Non-string argument to load")
-	return k.Fn(&VPair{WrapEnv(env), VNil})
+	ctx.Expr = WrapEnv(env)
 }
 
-func qimport(eval Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
-	loader(eval, env, x, "Non-string argument to import")
-	return k.Fn(&VPair{VNil, VNil})
+func qimport(eval Evaller, ctx *Tail, x *VPair) {
+	loader(eval, ctx.Env, x, "Non-string argument to import")
+	ctx.Return(&VPair{VNil, VNil})
 }
 
-func bindcc(_ Evaller, senv *Environment, k *Continuation, x *VPair) *Tail {
+func bindcc(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No arguments to bind/cc")
 	}
@@ -334,17 +335,19 @@ func bindcc(_ Evaller, senv *Environment, k *Continuation, x *VPair) *Tail {
 	if !ok {
 		panic("No body provided to bind/cc")
 	}
-	return &Tail{body.Car, NewEnv(senv, map[VSym]interface{}{
-		k_sym: &Applicative{func(_ Callable, _ Evaller, cenv *Environment, _ *Continuation, args *VPair) *Tail {
+	sk, senv := ctx.K, ctx.Env
+	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]interface{}{
+		k_sym: &Applicative{func(_ Callable, _ Evaller, nctx *Tail, args *VPair) {
 			if args == nil {
-				return k.Fn(VNil)
+				sk.Fn(nctx, VNil)
+			} else {
+				*nctx = Tail{args.Car, senv, sk}
 			}
-			return &Tail{args.Car, cenv, k}
-		}, k},
-	}), k}
+		}, sk},
+	})
 }
 
-func qcons(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qcons(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Arguments to cons")
 	}
@@ -352,12 +355,13 @@ func qcons(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		if cdr == nil {
 			panic("Too few arguments to cons")
 		}
-		return k.Fn(&VPair{&VPair{x.Car, cdr.Car}, VNil})
+		ctx.Return(&VPair{&VPair{x.Car, cdr.Car}, VNil})
+		return
 	}
-	panic("Invalid Arguments to cons")
+	panic(fmt.Sprintf("Invalid Arguments to cons: %v", x))
 }
 
-func qcar(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qcar(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Argument to car")
 	}
@@ -365,12 +369,13 @@ func qcar(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		if arg == nil {
 			panic("Empty List Passed to car")
 		}
-		return k.Fn(&VPair{arg.Car, VNil})
+		ctx.Return(&VPair{arg.Car, VNil})
+		return
 	}
-	panic("Invalid Argument to car")
+	panic(fmt.Sprintf("Invalid Argument to car: %v", x))
 }
 
-func qcdr(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func qcdr(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Argument to cdr")
 	}
@@ -378,31 +383,33 @@ func qcdr(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
 		if arg == nil {
 			panic("Empty List Passed to cdr")
 		}
-		return k.Fn(&VPair{arg.Cdr, VNil})
+		ctx.Return(&VPair{arg.Cdr, VNil})
+		return
 	}
-	panic("Invalid Argument to cdr")
+	panic(fmt.Sprintf("Invalid Argument to cdr: %v", x))
 }
 
-func last(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
+func last(_ Evaller, ctx *Tail, x *VPair) {
 	var nx *VPair
 	var ok bool
 	for ; x != nil; x = nx {
 		if nx, ok = x.Cdr.(*VPair); ok {
 			if nx == nil {
-				return k.Fn(&VPair{x.Car, VNil})
+				ctx.Return(&VPair{x.Car, VNil})
+				return
 			}
 		} else {
 			panic("Invalid Argument List")
 		}
 	}
-	return k.Fn(VNil)
+	ctx.Return(VNil)
 }
 
-func qlist(_ Evaller, _ *Environment, k *Continuation, x *VPair) *Tail {
-	return k.Fn(&VPair{x, VNil})
+func qlist(_ Evaller, ctx *Tail, x *VPair) {
+	ctx.Return(&VPair{x, VNil})
 }
 
-func def(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func def(_ Evaller, ctx *Tail, x *VPair) {
 	if x == nil {
 		panic("No Arguments to def")
 	}
@@ -420,18 +427,21 @@ func def(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
 	} else {
 		val = rest.Car
 	}
-	return &Tail{val, env, &Continuation{
-		func(args *VPair) *Tail {
-			env.Set(sym, args.Car)
-			return k.Fn(&VPair{args.Car, VNil})
+	sk, senv := ctx.K, ctx.Env
+	ctx.Expr, ctx.K = val, &Continuation{
+		"def",
+		func(nctx *Tail, args *VPair) {
+			senv.Set(sym, args.Car)
+			nctx.Env, nctx.K = senv, sk
+			nctx.Return(&VPair{args.Car, VNil})
 		},
-	}}
+	}
 }
 
-func qprint(_ Evaller, env *Environment, k *Continuation, x *VPair) *Tail {
+func qprint(_ Evaller, ctx *Tail, x *VPair) {
 	for x != nil {
-		fmt.Printf("%s", x.Car)
+		fmt.Printf("%v", x.Car)
 		x, _ = x.Cdr.(*VPair)
 	}
-	return k.Fn(&VPair{VNil, VNil})
+	ctx.Return(&VPair{VNil, VNil})
 }

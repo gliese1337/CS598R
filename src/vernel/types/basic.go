@@ -12,10 +12,14 @@ type Tail struct {
 	K    *Continuation
 }
 
+func (t *Tail) Return(x *VPair) {
+	t.K.Fn(t, x)
+}
+
 type Evaller func(interface{}, *Environment, *Continuation) interface{}
 
 type Callable interface {
-	Call(Evaller, *Environment, *Continuation, *VPair) *Tail
+	Call(Evaller, *Tail, *VPair)
 }
 
 type VSym string
@@ -37,7 +41,7 @@ func (v VNum) String() string {
 }
 
 /*
-func (v VNum) Call(eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
+func (v VNum) Call(eval Evaller, ctx *Tail args *VPair) {
 	//TODO: Make numbers look like church numerals
 	//Short cut- exponentiatiate if the arg is another number
 	//Does anything else make sense for non-integers?
@@ -53,18 +57,20 @@ func (v VBool) String() string {
 	return "#f"
 }
 
-func (v VBool) Call(eval Evaller, env *Environment, k *Continuation, args *VPair) *Tail {
+func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) {
 	if args == nil {
-		return k.Fn(&VPair{VNil, VNil})
+		ctx.Expr = VNil
+	} else {
+		cdr, ok := args.Cdr.(*VPair)
+		if !ok || cdr == nil {
+			panic(fmt.Sprintf("Invalid Arguments to Branch: %v", args))
+		}
+		if bool(v) {
+			ctx.Expr = args.Car
+		} else {
+			ctx.Expr = cdr.Car
+		}
 	}
-	cdr, ok := args.Cdr.(*VPair)
-	if !ok || cdr == nil {
-		panic("Invalid Arguments to Branch")
-	}
-	if bool(v) {
-		return &Tail{args.Car, env, k}
-	}
-	return &Tail{cdr.Car, env, k}
 }
 
 type VPair struct {
