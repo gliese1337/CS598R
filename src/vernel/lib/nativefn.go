@@ -213,6 +213,142 @@ func qsub(_ Evaller, ctx *Tail, x *VPair) {
 	ctx.Expr = VNum(ret)
 }
 
+func qless(_ Evaller, ctx *Tail, x *VPair) {
+	if x == nil {
+		panic("No arguments to qless")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qless")
+	}
+	last := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qless")
+		}
+		next := float64(b)
+		if last >= next {
+			ctx.Expr = VBool(false)
+			return
+		}
+		last = next
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	ctx.Expr = VBool(true)
+}
+
+func qlesseq(_ Evaller, ctx *Tail, x *VPair) {
+	if x == nil {
+		panic("No arguments to qlesseq")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qlesseq")
+	}
+	last := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qlesseq")
+		}
+		next := float64(b)
+		if last > next {
+			ctx.Expr = VBool(false)
+			return
+		}
+		last = next
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	ctx.Expr = VBool(true)
+}
+
+func qgreater(_ Evaller, ctx *Tail, x *VPair) {
+	if x == nil {
+		panic("No arguments to qgreater")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qgreater")
+	}
+	last := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qgreater")
+		}
+		next := float64(b)
+		if last <= next {
+			ctx.Expr = VBool(false)
+			return
+		}
+		last = next
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	ctx.Expr = VBool(true)
+}
+
+func qgreatereq(_ Evaller, ctx *Tail, x *VPair) {
+	if x == nil {
+		panic("No arguments to qgreatereq")
+	}
+	first, ok := x.Car.(VNum)
+	if !ok {
+		panic("Non-numeric argument to qgreatereq")
+	}
+	last := float64(first)
+	x, ok = x.Cdr.(*VPair)
+	if !ok {
+		x = &VPair{x.Cdr, VNil}
+	}
+	for x != nil {
+		b, ok := x.Car.(VNum)
+		if !ok {
+			panic("Non-numeric argument to qgreatereq")
+		}
+		next := float64(b)
+		if last < next {
+			ctx.Expr = VBool(false)
+			return
+		}
+		last = next
+		cdr, ok := x.Cdr.(*VPair)
+		if ok {
+			x = cdr
+		} else {
+			x = &VPair{cdr, VNil}
+		}
+	}
+	ctx.Expr = VBool(true)
+}
+
 func qisbool(_ Evaller, ctx *Tail, x *VPair) {
 	_, ok := x.Car.(VBool)
 	ctx.Expr = VBool(ok)

@@ -1,0 +1,31 @@
+(import "tests/prelude.vrn")
+
+(println "Starting sqrt definitions.")
+
+(def abs (fn/rtl (x) % ((> x 0) x (- 0 x))))
+(def square (fn/rtl (x) % (* x x)))
+(def average (fn/rtl (x y) % (/ (+ x y) 2)))
+
+(def good-enough? 
+    (fn/rtl (guess x) %	(seq 
+	(def sqr (square guess))
+	(def diff (- x (square guess)))
+	;(println "X: " x " Guess: " guess " Square: " sqr " Diff: " diff)
+	(< (abs diff) 0.00001))))
+(def improve
+	(fn/rtl (guess x) %
+		(average guess (/ x guess))))
+(def sqrt-iter 
+    (fn/rtl (guess x) %
+        ((good-enough? guess x) guess (sqrt-iter (improve guess x) x))))
+
+(def sqrt (fn/rtl (x) % (sqrt-iter 1.0 x)))
+
+(println "Starting sqrt tests.")
+
+(println (sqrt 4))
+(println (sqrt 2))
+(println (sqrt 7))
+(println (sqrt (+ 1 5)))
+(println (sqrt 100))
+(println (sqrt 2000))

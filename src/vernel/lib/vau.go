@@ -42,12 +42,13 @@ func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) {
 	var mloop func(*Tail, *VPair, *VPair)
 	mloop = func(kctx *Tail, oa *VPair, na *VPair) {
 		kctx.Expr = oa.Car
+		kctx.Env = senv
 		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) {
 			na.Car = va.Car
 			if next_arg, ok := oa.Cdr.(*VPair); ok {
 				if next_arg == nil {
 					nctx.Env, nctx.K = senv, sk
-					internal.Call(eval, ctx, &argv)
+					internal.Call(eval, nctx, &argv)
 				} else {
 					next_slot := &VPair{nil, VNil}
 					na.Cdr = next_slot

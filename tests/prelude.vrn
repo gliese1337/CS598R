@@ -4,7 +4,6 @@
 (def cdr (wrap/rtl qcdr))
 (def list/rtl (wrap/rtl qlist))
 (def seq (wrap/rtl last))
-(def print (wrap/rtl qprint))
 (def qns (vau (e b) % (e b)))
 (def ns (wrap/rtl qns))
 (def cur-env (vau () % %))
@@ -22,6 +21,10 @@
 (def / (wrap/rtl '/))
 (def + (wrap/rtl '+))
 (def - (wrap/rtl '-))
+(def < (wrap/rtl '<))
+(def <= (wrap/rtl '<=))
+(def > (wrap/rtl '>))
+(def >= (wrap/rtl '>=))
 (def sym? (wrap/rtl qsym?))
 (def str? (wrap/rtl qstr?))
 (def bool? (wrap/rtl qbool?))
@@ -39,6 +42,11 @@
 (def qcall (vau (p . args) % (seq
 	(% (cons p args)))))
 (def call/rtl (wrap/rtl qcall))
+
+(def print (wrap/rtl qprint))
+(def println (fn/rtl a % (seq (@/rtl print a) (print "
+"))))
+
 (def check (vau (a b name) % (seq
 	(def va (% a))
 	(def vb (% b))
