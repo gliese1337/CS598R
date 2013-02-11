@@ -2,7 +2,7 @@ package lib
 
 import . "vernel/types"
 
-func vau(_ Evaller, ctx *Tail, x *VPair) {
+func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Arguments to vau")
 	}
@@ -29,62 +29,76 @@ func vau(_ Evaller, ctx *Tail, x *VPair) {
 		Dsym:    dsym,
 		Body:    rest.Car,
 	}
+	return false
 }
 
-func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) {
+func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	/*map arglist with eval function*/
 	if args == nil {
-		internal.Call(eval, ctx, VNil)
-		return
+		return internal.Call(eval, ctx, VNil)
 	}
 	senv, sk := ctx.Env, ctx.K
 	argv := VPair{nil, VNil}
-	var mloop func(*Tail, *VPair, *VPair)
-	mloop = func(kctx *Tail, oa *VPair, na *VPair) {
+	var mloop func(*Tail, *VPair, *VPair) bool
+	mloop = func(kctx *Tail, oa *VPair, na *VPair) bool {
 		kctx.Expr = oa.Car
-		kctx.Env = senv
-		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) {
+		kctx.Env = senv //TODO: Why is this necessary?
+		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) bool {
 			na.Car = va.Car
 			if next_arg, ok := oa.Cdr.(*VPair); ok {
 				if next_arg == nil {
 					nctx.Env, nctx.K = senv, sk
-					internal.Call(eval, nctx, &argv)
+					return internal.Call(eval, nctx, &argv)
 				} else {
 					next_slot := &VPair{nil, VNil}
 					na.Cdr = next_slot
-					mloop(nctx, next_arg, next_slot)
+					return mloop(nctx, next_arg, next_slot)
 				}
-			} else {
-				panic("Invalid Argument List")
 			}
+			panic("Invalid Argument List")
 		}}
+		return true
 	}
-	mloop(ctx, args, &argv)
+	return mloop(ctx, args, &argv)
 }
 
-func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair)) Callable {
-	return &NativeFn{"wrapper", func(eval Evaller, ctx *Tail, x *VPair) {
+func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair) bool) Callable {
+	qwrapf := func(_ Evaller, ctx *Tail, x *VPair) bool {
 		if x == nil {
 			panic("No Argument to wrap")
 		}
-		sk := ctx.K
-		ctx.Expr, ctx.K = x.Car, &Continuation{"wrapped", func(nctx *Tail, v *VPair) {
-			if proc, ok := v.Car.(Callable); ok {
-				sk.Fn(nctx, &VPair{&Applicative{fn, proc}, VNil})
-			} else {
-				panic("Non-callable passed to wrap")
-			}
-		}}
-	}}
+		if proc, ok := x.Car.(Callable); ok {
+			ctx.Expr = &Applicative{fn, proc}
+			return false
+		}
+		panic("Non-callable passed to wrap")
+	}
+	return &Applicative{func(_ Callable, _ Evaller, ctx *Tail, cargs *VPair) bool {
+		if cargs == nil {
+			ctx.Expr = VNil
+		} else {
+			ctx.Expr = cargs.Car
+		}
+		sctx := *ctx
+		ctx.K = &Continuation{
+			"wrap",
+			func(nctx *Tail, v *VPair) bool {
+				evaluate := qwrapf(nil,&sctx,v)
+				*nctx = sctx
+				return evaluate
+			},
+		}
+		return true
+	},&NativeFn{"wrapper",qwrapf}}
 }
 
-func qunwrap(eval Evaller, ctx *Tail, x *VPair) {
+func qunwrap(eval Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Arguments unwrap")
 	}
 	if arg, ok := x.Car.(*Applicative); ok {
-		ctx.Return(&VPair{arg.Internal, VNil})
-	} else {
-		panic("Can't unwrap non-applicative")
+		ctx.Expr = arg.Internal
+		return false
 	}
+	panic("Can't unwrap non-applicative")
 }

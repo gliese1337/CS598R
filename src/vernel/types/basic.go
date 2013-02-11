@@ -12,14 +12,14 @@ type Tail struct {
 	K    *Continuation
 }
 
-func (t *Tail) Return(x *VPair) {
-	t.K.Fn(t, x)
+func (t *Tail) Return(x *VPair) bool {
+	return t.K.Fn(t, x)
 }
 
 type Evaller func(interface{}, *Environment, *Continuation) interface{}
 
 type Callable interface {
-	Call(Evaller, *Tail, *VPair)
+	Call(Evaller, *Tail, *VPair) bool
 }
 
 type VSym string
@@ -57,7 +57,7 @@ func (v VBool) String() string {
 	return "#f"
 }
 
-func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) {
+func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) bool {
 	if args == nil {
 		ctx.Expr = VNil
 	} else {
@@ -71,6 +71,7 @@ func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) {
 			ctx.Expr = cdr.Car
 		}
 	}
+	return true
 }
 
 type VPair struct {

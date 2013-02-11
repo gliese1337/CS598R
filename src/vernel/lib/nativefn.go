@@ -9,14 +9,14 @@ import (
 	. "vernel/types"
 )
 
-func vpanic(_ Evaller, _ *Tail, x *VPair) {
+func vpanic(_ Evaller, _ *Tail, x *VPair) bool {
 	if x == nil {
 		panic("Runtime Error")
 	}
 	panic(x.Car)
 }
 
-func timer(eval Evaller, ctx *Tail, x *VPair) {
+func timer(eval Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to timer.")
 	}
@@ -31,53 +31,52 @@ func timer(eval Evaller, ctx *Tail, x *VPair) {
 	start := time.Now()
 	val := eval(expr.Car, ctx.Env, Top)
 	fmt.Printf("%s ran in %v.\n", label, time.Since(start))
-	ctx.Return(&VPair{val, VNil})
+	ctx.Expr = val
+	return false
 }
 
-func qand(_ Evaller, ctx *Tail, x *VPair) {
+func qand(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qand")
 	}
-	for x != nil {
+	var ok bool
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qand")
 		}
 		if !bool(b) {
 			ctx.Expr = b
-			return
-		}
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
+			return false
 		}
 	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
 	ctx.Expr = VBool(true)
+	return false
 }
 
-func qor(_ Evaller, ctx *Tail, x *VPair) {
+func qor(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qor")
 	}
-	for x != nil {
+	var ok bool
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qor")
 		}
 		if bool(b) {
 			ctx.Expr = b
-			return
-		}
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
+			return false
 		}
 	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
 	ctx.Expr = VBool(false)
+	return false
 }
 
 func equal(a interface{}, b interface{}) bool {
@@ -90,51 +89,52 @@ func equal(a interface{}, b interface{}) bool {
 	return a == b
 }
 
-func qeq(_ Evaller, ctx *Tail, x *VPair) {
+func qeq(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qeq")
 	}
-	for {
-		cdr, ok := x.Cdr.(*VPair)
+	var cdr *VPair
+	var ok bool
+	for ;; x = cdr {
+		cdr, ok = x.Cdr.(*VPair)
 		if ok {
 			if cdr == nil {
 				ctx.Expr = VBool(true)
-				break
+				return false
 			}
 			if !equal(x.Car, cdr.Car) {
 				ctx.Expr = VBool(false)
-				break
+				return false
 			}
-			x = cdr
 		} else {
 			ctx.Expr = VBool(x.Car == cdr)
-			break
+			return false
 		}
 	}
+	return false
 }
 
-func qmul(_ Evaller, ctx *Tail, x *VPair) {
+func qmul(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qmul")
 	}
 	var ret float64 = 1
-	for x != nil {
+	var ok bool
+	for ; x != nil ; x, ok = x.Cdr.(*VPair){
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qmul")
 		}
 		ret *= float64(b)
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
+	}
+	if !ok {
+		panic("Invalid Argument List")
 	}
 	ctx.Expr = VNum(ret)
+	return false
 }
 
-func qdiv(_ Evaller, ctx *Tail, x *VPair) {
+func qdiv(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qdiv")
 	}
@@ -144,47 +144,41 @@ func qdiv(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qmul")
 		}
 		ret /= float64(b)
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
+	}
+	if !ok {
+		panic("Invalid Argument List")
 	}
 	ctx.Expr = VNum(ret)
+	return false
 }
 
-func qadd(_ Evaller, ctx *Tail, x *VPair) {
+func qadd(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qadd")
 	}
 	var ret float64 = 0
-	for x != nil {
+	var ok bool
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qadd")
 		}
 		ret += float64(b)
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
+	}
+	if !ok {
+		panic("Invalid Argument List")
 	}
 	ctx.Expr = VNum(ret)
+	return false
 }
 
-func qsub(_ Evaller, ctx *Tail, x *VPair) {
+func qsub(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qsub")
 	}
@@ -194,26 +188,21 @@ func qsub(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qsub")
 		}
 		ret -= float64(b)
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
+	}
+	if !ok {
+		panic("Invalid Argument List")
 	}
 	ctx.Expr = VNum(ret)
+	return false
 }
 
-func qless(_ Evaller, ctx *Tail, x *VPair) {
+func qless(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qless")
 	}
@@ -223,10 +212,7 @@ func qless(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qless")
@@ -234,20 +220,15 @@ func qless(_ Evaller, ctx *Tail, x *VPair) {
 		next := float64(b)
 		if last >= next {
 			ctx.Expr = VBool(false)
-			return
+			return false
 		}
 		last = next
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
 	}
 	ctx.Expr = VBool(true)
+	return false
 }
 
-func qlesseq(_ Evaller, ctx *Tail, x *VPair) {
+func qlesseq(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qlesseq")
 	}
@@ -257,10 +238,7 @@ func qlesseq(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -268,20 +246,15 @@ func qlesseq(_ Evaller, ctx *Tail, x *VPair) {
 		next := float64(b)
 		if last > next {
 			ctx.Expr = VBool(false)
-			return
+			return false
 		}
 		last = next
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
 	}
 	ctx.Expr = VBool(true)
+	return false
 }
 
-func qgreater(_ Evaller, ctx *Tail, x *VPair) {
+func qgreater(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qgreater")
 	}
@@ -291,31 +264,23 @@ func qgreater(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
-			panic("Non-numeric argument to qgreater")
+			panic("Non-numeric argument to qlesseq")
 		}
 		next := float64(b)
 		if last <= next {
 			ctx.Expr = VBool(false)
-			return
+			return false
 		}
 		last = next
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
 	}
 	ctx.Expr = VBool(true)
+	return false
 }
 
-func qgreatereq(_ Evaller, ctx *Tail, x *VPair) {
+func qgreatereq(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to qgreatereq")
 	}
@@ -325,55 +290,52 @@ func qgreatereq(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	if !ok {
-		x = &VPair{x.Cdr, VNil}
-	}
-	for x != nil {
+	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
-			panic("Non-numeric argument to qgreatereq")
+			panic("Non-numeric argument to qlesseq")
 		}
 		next := float64(b)
 		if last < next {
 			ctx.Expr = VBool(false)
-			return
+			return false
 		}
 		last = next
-		cdr, ok := x.Cdr.(*VPair)
-		if ok {
-			x = cdr
-		} else {
-			x = &VPair{cdr, VNil}
-		}
 	}
 	ctx.Expr = VBool(true)
+	return false
 }
 
-func qisbool(_ Evaller, ctx *Tail, x *VPair) {
+func qisbool(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(VBool)
 	ctx.Expr = VBool(ok)
+	return false
 }
-func qisnum(_ Evaller, ctx *Tail, x *VPair) {
+func qisnum(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(VNum)
 	ctx.Expr = VBool(ok)
+	return false
 }
-func qispair(_ Evaller, ctx *Tail, x *VPair) {
+func qispair(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(*VPair)
 	ctx.Expr = VBool(ok)
+	return false
 }
-func qisstr(_ Evaller, ctx *Tail, x *VPair) {
+func qisstr(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(VStr)
 	ctx.Expr = VBool(ok)
+	return false
 }
-func qissym(_ Evaller, ctx *Tail, x *VPair) {
+func qissym(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(VSym)
 	ctx.Expr = VBool(ok)
+	return false
 }
 
-func qread(_ Evaller, ctx *Tail, x *VPair) {
+func qread(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
-		ctx.Return(&VPair{VNil, VNil})
-		return
+		ctx.Expr = VNil
+		return false
 	}
 	inchan := make(chan rune)
 	go func() {
@@ -395,7 +357,8 @@ func qread(_ Evaller, ctx *Tail, x *VPair) {
 		curpair.Cdr = nextpair
 		curpair = nextpair
 	}
-	ctx.Return(&VPair{rootpair.Cdr, VNil})
+	ctx.Expr = rootpair.Cdr
+	return false
 }
 
 func load_env(eval Evaller, env *Environment, fname string) {
@@ -420,7 +383,7 @@ func load_env(eval Evaller, env *Environment, fname string) {
 	}
 }
 
-func use(eval Evaller, ctx *Tail, x *VPair) {
+func use(eval Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to use")
 	}
@@ -435,6 +398,7 @@ func use(eval Evaller, ctx *Tail, x *VPair) {
 	env := GetBuiltins()
 	load_env(eval, env, string(vstr))
 	ctx.Expr, ctx.Env = body.Car, env
+	return true
 }
 
 func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
@@ -448,18 +412,30 @@ func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
 	}
 }
 
-func load(eval Evaller, ctx *Tail, x *VPair) {
+func load(eval Evaller, ctx *Tail, x *VPair) bool {
 	env := GetBuiltins()
 	loader(eval, env, x, "Non-string argument to load")
 	ctx.Expr = WrapEnv(env)
+	return false
 }
 
-func qimport(eval Evaller, ctx *Tail, x *VPair) {
+func qimport(eval Evaller, ctx *Tail, x *VPair) bool {
 	loader(eval, ctx.Env, x, "Non-string argument to import")
-	ctx.Return(&VPair{VNil, VNil})
+	ctx.Expr = VNil
+	return false
 }
 
-func bindcc(_ Evaller, ctx *Tail, x *VPair) {
+func abort(_ Evaller, ctx *Tail, x *VPair) bool {
+	ctx.K = Top
+	if x == nil {
+		ctx.Expr = VNil
+		return false
+	}
+	ctx.Expr = x.Car
+	return true
+}
+
+func bindcc(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No arguments to bind/cc")
 	}
@@ -473,17 +449,18 @@ func bindcc(_ Evaller, ctx *Tail, x *VPair) {
 	}
 	sk, senv := ctx.K, ctx.Env
 	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]interface{}{
-		k_sym: &Applicative{func(_ Callable, _ Evaller, nctx *Tail, args *VPair) {
+		k_sym: &Applicative{func(_ Callable, _ Evaller, nctx *Tail, args *VPair) bool {
 			if args == nil {
-				sk.Fn(nctx, VNil)
-			} else {
-				*nctx = Tail{args.Car, senv, sk}
+				return sk.Fn(nctx, VNil)
 			}
+			*nctx = Tail{args.Car, senv, sk}
+			return true
 		}, sk},
 	})
+	return true
 }
 
-func qcons(_ Evaller, ctx *Tail, x *VPair) {
+func qcons(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Arguments to cons")
 	}
@@ -491,13 +468,13 @@ func qcons(_ Evaller, ctx *Tail, x *VPair) {
 		if cdr == nil {
 			panic("Too few arguments to cons")
 		}
-		ctx.Return(&VPair{&VPair{x.Car, cdr.Car}, VNil})
-		return
+		ctx.Expr = &VPair{x.Car, cdr.Car}
+		return false
 	}
 	panic(fmt.Sprintf("Invalid Arguments to cons: %v", x))
 }
 
-func qcar(_ Evaller, ctx *Tail, x *VPair) {
+func qcar(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Argument to car")
 	}
@@ -505,13 +482,13 @@ func qcar(_ Evaller, ctx *Tail, x *VPair) {
 		if arg == nil {
 			panic("Empty List Passed to car")
 		}
-		ctx.Return(&VPair{arg.Car, VNil})
-		return
+		ctx.Expr = arg.Car
+		return false
 	}
 	panic(fmt.Sprintf("Invalid Argument to car: %v", x))
 }
 
-func qcdr(_ Evaller, ctx *Tail, x *VPair) {
+func qcdr(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Argument to cdr")
 	}
@@ -519,33 +496,35 @@ func qcdr(_ Evaller, ctx *Tail, x *VPair) {
 		if arg == nil {
 			panic("Empty List Passed to cdr")
 		}
-		ctx.Return(&VPair{arg.Cdr, VNil})
-		return
+		ctx.Expr = arg.Cdr
+		return false
 	}
 	panic(fmt.Sprintf("Invalid Argument to cdr: %v", x))
 }
 
-func last(_ Evaller, ctx *Tail, x *VPair) {
+func last(_ Evaller, ctx *Tail, x *VPair) bool {
 	var nx *VPair
 	var ok bool
 	for ; x != nil; x = nx {
 		if nx, ok = x.Cdr.(*VPair); ok {
 			if nx == nil {
-				ctx.Return(&VPair{x.Car, VNil})
-				return
+				ctx.Expr = x.Car
+				return false
 			}
 		} else {
 			panic("Invalid Argument List")
 		}
 	}
-	ctx.Return(VNil)
+	ctx.Expr = VNil
+	return false
 }
 
-func qlist(_ Evaller, ctx *Tail, x *VPair) {
-	ctx.Return(&VPair{x, VNil})
+func qlist(_ Evaller, ctx *Tail, x *VPair) bool {
+	ctx.Expr = x
+	return false
 }
 
-func def(_ Evaller, ctx *Tail, x *VPair) {
+func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Arguments to def")
 	}
@@ -566,18 +545,20 @@ func def(_ Evaller, ctx *Tail, x *VPair) {
 	sk, senv := ctx.K, ctx.Env
 	ctx.Expr, ctx.K = val, &Continuation{
 		"def",
-		func(nctx *Tail, args *VPair) {
+		func(nctx *Tail, args *VPair) bool {
 			senv.Set(sym, args.Car)
-			nctx.Env, nctx.K = senv, sk
-			nctx.Return(&VPair{args.Car, VNil})
+			*nctx = Tail{args.Car, senv, sk}
+			return false
 		},
 	}
+	return true
 }
 
-func qprint(_ Evaller, ctx *Tail, x *VPair) {
+func qprint(_ Evaller, ctx *Tail, x *VPair) bool {
 	for x != nil {
 		fmt.Printf("%v", x.Car)
 		x, _ = x.Cdr.(*VPair)
 	}
-	ctx.Return(&VPair{VNil, VNil})
+	ctx.Expr = VNil
+	return false
 }

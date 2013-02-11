@@ -4,11 +4,11 @@ import "fmt"
 
 type Continuation struct {
 	Name string
-	Fn   func(*Tail, *VPair)
+	Fn   func(*Tail, *VPair) bool
 }
 
-func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) {
-	k.Fn(ctx, x)
+func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) bool {
+	return k.Fn(ctx, x)
 }
 
 func (k *Continuation) String() string {
@@ -17,18 +17,19 @@ func (k *Continuation) String() string {
 
 var Top = &Continuation{
 	"Top",
-	func(ctx *Tail, args *VPair) {
+	func(ctx *Tail, args *VPair) bool {
 		ctx.Expr, ctx.K = args.Car, nil
+		return false
 	},
 }
 
 type NativeFn struct {
 	Name string
-	Fn   func(Evaller, *Tail, *VPair)
+	Fn   func(Evaller, *Tail, *VPair) bool
 }
 
-func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) {
-	nfn.Fn(eval, ctx, x)
+func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) bool {
+	return nfn.Fn(eval, ctx, x)
 }
 
 func (nfn *NativeFn) String() string {
@@ -75,10 +76,11 @@ type Combiner struct {
 	Body    interface{}
 }
 
-func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) {
+func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	arg_map := match_args(c.Formals, args)
 	arg_map[c.Dsym] = WrapEnv(ctx.Env)
 	ctx.Expr, ctx.Env = c.Body, NewEnv(c.Cenv, arg_map)
+	return true
 }
 
 func (c *Combiner) String() string {
@@ -86,12 +88,12 @@ func (c *Combiner) String() string {
 }
 
 type Applicative struct {
-	Wrapper  func(Callable, Evaller, *Tail, *VPair)
+	Wrapper  func(Callable, Evaller, *Tail, *VPair) bool
 	Internal Callable
 }
 
-func (a *Applicative) Call(eval Evaller, ctx *Tail, args *VPair) {
-	a.Wrapper(a.Internal, eval, ctx, args)
+func (a *Applicative) Call(eval Evaller, ctx *Tail, args *VPair) bool {
+	return a.Wrapper(a.Internal, eval, ctx, args)
 }
 
 func (a *Applicative) String() string {

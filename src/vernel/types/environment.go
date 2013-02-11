@@ -48,11 +48,12 @@ func (env *Environment) Set(x VSym, y interface{}) interface{} {
 	return y
 }
 
-func (env *Environment) Call(_ Evaller, ctx *Tail, args *VPair) {
+func (env *Environment) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	if args == nil {
 		panic("No argument to evaluation")
 	}
 	ctx.Expr, ctx.Env = args.Car, env
+	return true
 }
 
 func NewEnv(p *Environment, v map[VSym]interface{}) *Environment {
@@ -60,18 +61,20 @@ func NewEnv(p *Environment, v map[VSym]interface{}) *Environment {
 }
 
 func WrapEnv(p *Environment) *Applicative {
-	return &Applicative{func(_ Callable, _ Evaller, ctx *Tail, cargs *VPair) {
+	return &Applicative{func(_ Callable, _ Evaller, ctx *Tail, cargs *VPair) bool {
 		if cargs == nil {
 			ctx.Expr = VNil
 		} else {
 			sctx := *ctx
 			ctx.Expr, ctx.K = cargs.Car, &Continuation{
 				"eval",
-				func(nctx *Tail, v *VPair) {
-					p.Call(nil, &sctx, v)
+				func(nctx *Tail, v *VPair) bool {
+					evaluate := p.Call(nil, &sctx, v)
 					*nctx = sctx
+					return evaluate
 				},
 			}
 		}
+		return true
 	}, p}
 }
