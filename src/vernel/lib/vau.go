@@ -1,6 +1,7 @@
 package lib
 
 import . "vernel/types"
+import "sync"
 
 func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
@@ -60,6 +61,94 @@ func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 		return true
 	}
 	return mloop(ctx, args, &argv)
+}
+
+func copy_arglist(idx int, val interface{}, arglist *VPair) *VPair {
+	//copy cells up to the target, but keep the same tail; works as long as cells are immutable
+	first := *arglist
+	last := &first
+	for i := 1; i <= idx; i++ {
+		next := *last.Cdr
+		last.Cdr = &next
+		last = next
+	}
+	last.Car = vals.Car
+	return &first
+}
+
+func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
+	if args == nil {
+		return internal.Call(eval, ctx, VNil)
+	}
+	count, ok := 0, true
+	for a := args; a != nil && ok; a, ok = a.Cdr.(*VPair) {
+		count++
+	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
+	
+	sctx := *ctx
+	last_idx := count-1
+	blocked := make(map[*Tail]struct{})
+	arglist := make([]VPair,count,count)
+	c_lock := new(sync.RWMutex)
+	
+	reactivate := func(idx int) (func(*Tail, *VPair) bool) {
+		reassign := func(nctx *Tail, vals *VPair) bool {
+			*nctx = sctx
+			nargs := copy_arglist(idx,vals.Car,&(arglist[0])
+			return internal.Call(eval,nctx,nargs)
+		}
+		return func(nctx *Tail, vals *VPair) bool {
+			c_lock.RLock()
+			if count > 0 {
+				c_lock.RUnlock()
+				context := Tail{nil,sctx.Env,&Continuation{"ArgK",reassign}}
+				blocked[&context] = struct{}
+				nctx.K = nil
+				return false
+			}
+			c_lock.RUnlock()
+			return reassign(nctx,vals)
+		}
+	}
+	
+	make_argk := func(idx int) &Continuation {
+		var k Continuation
+		k.Name = "ArgK"
+		k.Fn = func(nctx *Tail, vals *VPair) bool {
+			arglist[idx].Car = vals.Car
+			k.Fn = reactivate(idx)
+			c_lock.Lock()
+			count -= 1
+			if count > 0 { //die silently
+				c_lock.Unlock()
+				nctx.K = nil
+				return false
+			}
+			c_lock.Unlock()
+			//last one done, evaluate the body and anybody who blocked
+			for context, _ := range blocked {
+				go eval(context.Expr,context.Env,context.K)
+			}
+			*nctx = sctx
+			return internal.Call(eval,nctx,&(arglist[0]))
+		}
+		return &k
+	}
+	
+	//start new goroutine for all but one argument
+	arglist[last_idx].Cdr = VNil
+	for i := 0; i < last_idx; i++ {
+		arglist[i].Cdr = &(arglist[i+1])
+		go eval(a.Car,ctx.Env,make_argk(i))
+		args = args.Cdr.(*VPair)
+	}
+	//reuse current goroutine for last argument
+	ctx.Expr = arglist[last_idx].Car
+	ctx.K = make_argk(last_idx)	
+	return true
 }
 
 func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair) bool) Callable {
