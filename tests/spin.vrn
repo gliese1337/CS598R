@@ -1,0 +1,3 @@
+(import "tests/prelude.vrn")
+(def spin (fn/rtl (a) % (seq (println a) (spin (+ 1 a)))))
+(spin 0)

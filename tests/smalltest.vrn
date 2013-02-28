@@ -1,0 +1,4 @@
+(import "tests/prelude.vrn")
+
+(print (car (qcons a b)))
+(print (q a))

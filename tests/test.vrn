@@ -9,7 +9,7 @@
 (check (last car cdr cons) (q cons) "'last' test")
 (check (seq car cdr cons) cons "'seq' test")
 (check (bind/cc k (seq #t (k #f) car cdr)) #f "'bind/cc' test")
-(check (@/rtl cons (q (a b))) (q (a . b)) "@ test")
+(check (@ cons (q (a b))) (q (a . b)) "@ test")
 (check (call/rtl qcons (q a) (q b)) (q ( a . b)) "call test")
 (def var (vau (a . b) % b))
 (check (var a b c d) (qlist b c d) "variadic test 1")

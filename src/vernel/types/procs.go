@@ -48,7 +48,9 @@ func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 			if !ok {
 				panic("Cannot bind to non-symbol")
 			}
-			m[s] = a.Car
+			if string(s) != "##" {
+				m[s] = a.Car
+			}
 
 			ap, ok := a.Cdr.(*VPair)
 			switch fp := f.Cdr.(type) {
@@ -56,13 +58,17 @@ func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 				f, a = fp, ap
 			case VSym:
 				if ok {
-					m[fp] = ap
+					if string(fp) != "##" {
+						m[fp] = ap
+					}
 					f = nil
 				}
 			}
 		}
 	case VSym:
-		m[f] = a
+		if string(f) != "##" {
+			m[f] = a
+		}
 	default:
 		panic("Invalid formals!")
 	}
@@ -73,13 +79,18 @@ type Combiner struct {
 	Cenv    *Environment
 	Formals interface{}
 	Dsym    VSym
-	Body    interface{}
+	Body    *VPair
 }
 
 func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	arg_map := match_args(c.Formals, args)
-	arg_map[c.Dsym] = WrapEnv(ctx.Env)
-	ctx.Expr, ctx.Env = c.Body, NewEnv(c.Cenv, arg_map)
+	if string(c.Dsym) != "##" {
+		arg_map[c.Dsym] = WrapEnv(ctx.Env)
+	}
+	E := NewEnv(c.Cenv, arg_map)
+	B := c.Body
+	//TODO: Auto-sequence
+	ctx.Expr, ctx.Env = B.Car, E
 	return true
 }
 

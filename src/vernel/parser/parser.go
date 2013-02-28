@@ -13,6 +13,8 @@ func parse_special(in string) interface{} {
 		return VBool(true)
 	case "#f":
 		return VBool(false)
+	case "##":
+		return VSym("##")
 	}
 	panic("Invalid Special Form")
 	return nil

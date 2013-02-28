@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 	"vernel/parser"
 	. "vernel/types"
@@ -40,7 +41,7 @@ func qand(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No arguments to qand")
 	}
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qand")
@@ -62,7 +63,7 @@ func qor(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No arguments to qor")
 	}
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qor")
@@ -95,7 +96,7 @@ func qeq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var cdr *VPair
 	var ok bool
-	for ;; x = cdr {
+	for ; ; x = cdr {
 		cdr, ok = x.Cdr.(*VPair)
 		if ok {
 			if cdr == nil {
@@ -120,7 +121,7 @@ func qmul(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var ret float64 = 1
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair){
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qmul")
@@ -144,7 +145,7 @@ func qdiv(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qmul")
@@ -164,7 +165,7 @@ func qadd(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var ret float64 = 0
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qadd")
@@ -188,7 +189,7 @@ func qsub(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qsub")
@@ -212,7 +213,7 @@ func qless(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qless")
@@ -238,7 +239,7 @@ func qlesseq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -264,7 +265,7 @@ func qgreater(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -290,7 +291,7 @@ func qgreatereq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -554,11 +555,44 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	return true
 }
 
+func acc_syms(sset *(map[string]struct{}), arg interface{}) {
+	for arg != nil {
+		switch a := arg.(type) {
+		case *VPair:
+			acc_syms(sset, a.Car)
+			arg = a.Cdr
+		case VSym:
+			(*sset)[string(a)] = struct{}{}
+			arg = nil
+		default:
+			arg = nil
+		}
+	}
+}
+
+func unique(_ Evaller, ctx *Tail, x *VPair) bool {
+	var sset map[string]struct{}
+	acc_syms(&sset, x)
+	cntr := 0
+gen_str:
+	ustr := fmt.Sprintf("u%x", cntr)
+	if _, ok := sset[ustr]; ok {
+		cntr++
+		goto gen_str
+	}
+	ctx.Expr = VSym(ustr)
+	return false
+}
+
+var p_lock sync.Mutex
+
 func qprint(_ Evaller, ctx *Tail, x *VPair) bool {
+	(&p_lock).Lock()
 	for x != nil {
 		fmt.Printf("%v", x.Car)
 		x, _ = x.Cdr.(*VPair)
 	}
+	(&p_lock).Unlock()
 	ctx.Expr = VNil
 	return false
 }

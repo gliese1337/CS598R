@@ -14,6 +14,8 @@ func GetBuiltins() *Environment {
 			VSym("bind/cc"):  &NativeFn{"bind/cc", bindcc},
 			VSym("qunwrap"):  &NativeFn{"qunwrap", qunwrap},
 			VSym("wrap/rtl"): wrap_gen(rtlWrapper),
+			VSym("wrap/snc"): wrap_gen(syncWrapper),
+			VSym("wrap"):     wrap_gen(basicWrapper),
 			VSym("qprint"):   &NativeFn{"qprint", qprint},
 			VSym("last"):     &NativeFn{"last", last},
 			VSym("qlist"):    &NativeFn{"qlist", qlist},
@@ -29,9 +31,9 @@ func GetBuiltins() *Environment {
 			VSym("'+"):       &NativeFn{"qadd", qadd},
 			VSym("'-"):       &NativeFn{"qsub", qsub},
 			VSym("'<"):       &NativeFn{"qless", qless},
-			VSym("'<="):       &NativeFn{"qlesseq", qlesseq},
+			VSym("'<="):      &NativeFn{"qlesseq", qlesseq},
 			VSym("'>"):       &NativeFn{"qgreater", qgreater},
-			VSym("'>="):       &NativeFn{"qgreatereq", qgreatereq},
+			VSym("'>="):      &NativeFn{"qgreatereq", qgreatereq},
 			VSym("qbool?"):   &NativeFn{"qbool?", qisbool},
 			VSym("qnum?"):    &NativeFn{"qnum?", qisnum},
 			VSym("qstr?"):    &NativeFn{"qstr?", qisstr},
@@ -40,5 +42,6 @@ func GetBuiltins() *Environment {
 			VSym("timer"):    &NativeFn{"timer", timer},
 			VSym("panic"):    &NativeFn{"panic", vpanic},
 			VSym("abort"):    &NativeFn{"abort", abort},
+			VSym("qunique"):  &NativeFn{"qunique", unique},
 		})
 }

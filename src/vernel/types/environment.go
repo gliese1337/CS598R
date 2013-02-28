@@ -32,6 +32,9 @@ func (e *Environment) String() string {
 }
 
 func (env *Environment) Get(x VSym) interface{} {
+	if string(x) == "##" {
+		panic("## always unbound")
+	}
 loop:
 	if val, ok := env.values[x]; ok {
 		return val
@@ -44,7 +47,9 @@ loop:
 }
 
 func (env *Environment) Set(x VSym, y interface{}) interface{} {
-	env.values[x] = y
+	if string(x) != "##" {
+		env.values[x] = y
+	}
 	return y
 }
 

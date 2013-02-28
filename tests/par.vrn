@@ -1,0 +1,16 @@
+(import "tests/prelude.vrn")
+(par 
+	(println "hello 1")
+	(println "hello 2")
+	(println "hello 3")
+	(println "hello 4")
+	(println "hello 5"))
+(check (list
+	(q "hello 1")
+	(q "hello 2")
+	(q "hello 3")
+	(q "hello 4")
+	(q "hello 5")) (qlist "hello 1" "hello 2" "hello 3" "hello 4" "hello 5") "parlist test")
+
+
+(bind/cc k (list (+ 1 2) (k 2)))

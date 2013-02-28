@@ -45,7 +45,7 @@ func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
 				}
 			}
 		}
-		evaluate = state.K.Fn(&state,&VPair{state.Expr, VNil})
+		evaluate = state.K.Fn(&state, &VPair{state.Expr, VNil})
 	}
 	return state.Expr
 }
