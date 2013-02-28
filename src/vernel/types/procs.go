@@ -84,14 +84,35 @@ type Combiner struct {
 
 func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	arg_map := match_args(c.Formals, args)
+	if c.Body == nil {
+		ctx.Expr = VNil
+		return false
+	}
 	if string(c.Dsym) != "##" {
 		arg_map[c.Dsym] = WrapEnv(ctx.Env)
 	}
-	E := NewEnv(c.Cenv, arg_map)
-	B := c.Body
-	//TODO: Auto-sequence
-	ctx.Expr, ctx.Env = B.Car, E
-	return true
+	senv, sk := NewEnv(c.Cenv, arg_map), ctx.K
+	var eloop func(*Tail, *VPair) bool
+	eloop = func(kctx *Tail, body *VPair) bool {
+		var cfunc func(*Tail, *VPair) bool
+		next_expr, ok := body.Cdr.(*VPair)
+		if !ok {
+			panic("Invalid Function Body")
+		}
+		if next_expr == nil {
+			cfunc = func(nctx *Tail, va *VPair) bool {
+				nctx.Expr, nctx.K = va.Car, sk
+				return false
+			}
+		}else{
+			cfunc = func(nctx *Tail, va *VPair) bool {
+				return eloop(nctx, next_expr)
+			}
+		}
+		kctx.Expr, kctx.Env, kctx.K = body.Car, senv, &Continuation{"arg",cfunc}
+		return true
+	}
+	return eloop(ctx, c.Body)
 }
 
 func (c *Combiner) String() string {

@@ -21,7 +21,7 @@ func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("Missing Dynamic Environment Binding")
 	}
 	rest, ok := sym_rest.Cdr.(*VPair)
-	if rest == nil || !ok {
+	if !ok {
 		panic("Missing Vau Expression Body")
 	}
 	ctx.Expr = &Combiner{
@@ -33,37 +33,7 @@ func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 	return false
 }
 
-func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
-	//TODO: make thread safe
-	if args == nil {
-		return internal.Call(eval, ctx, VNil)
-	}
-	senv, sk := ctx.Env, ctx.K
-	argv := VPair{nil, VNil}
-	var mloop func(*Tail, *VPair, *VPair) bool
-	mloop = func(kctx *Tail, oa *VPair, na *VPair) bool {
-		kctx.Expr = oa.Car
-		kctx.Env = senv //TODO: Why is this necessary?
-		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) bool {
-			na.Car = va.Car
-			if next_arg, ok := oa.Cdr.(*VPair); ok {
-				if next_arg == nil {
-					nctx.Env, nctx.K = senv, sk
-					return internal.Call(eval, nctx, &argv)
-				} else {
-					next_slot := &VPair{nil, VNil}
-					na.Cdr = next_slot
-					return mloop(nctx, next_arg, next_slot)
-				}
-			}
-			panic("Invalid Argument List")
-		}}
-		return true
-	}
-	return mloop(ctx, args, &argv)
-}
-
-func copy_arglist(idx int, val interface{}, arglist *VPair) *VPair {
+func copy_arglist(idx int, arglist *VPair) (*VPair,*VPair) {
 	/*copy cells up to the target, but keep the same tail; works as long as cells are immutable*/
 	first := *arglist
 	last := &first
@@ -72,8 +42,56 @@ func copy_arglist(idx int, val interface{}, arglist *VPair) *VPair {
 		last.Cdr = &next           /*hook up to previous copied cell*/
 		last = &next
 	}
-	last.Car = val
-	return &first
+	return &first, last
+}
+
+func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
+	if args == nil {
+		return internal.Call(eval, ctx, VNil)
+	}
+	senv, sk := ctx.Env, ctx.K
+	var argloop func(*Tail, *VPair, int, *VPair, *VPair) bool
+	argloop = func(kctx *Tail, argv *VPair, depth int, oa *VPair, na *VPair) bool {
+		var next_call func(nctx *Tail, nargv *VPair) bool
+		next_arg, ok := oa.Cdr.(*VPair)
+		if !ok {
+			panic("Invalid Argument List")
+		}	
+		c_lock := new(sync.Mutex)
+		called := false
+		if next_arg == nil {
+			next_call = func(nctx *Tail, nargv *VPair) bool {
+				nctx.Env, nctx.K = senv, sk
+				return internal.Call(eval, nctx, nargv)
+			}
+		}else{
+			next_call = func(nctx *Tail, nargv *VPair) bool {
+				next_slot := &VPair{nil, VNil}
+				slot.Cdr = next_slot
+				return argloop(nctx, nargv, depth+1, next_arg, next_slot)
+			}
+		}
+		
+		//TODO: Why is restoring the environment necessary?
+		kctx.Expr, kctx.Env = oa.Car, senv
+		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) bool {
+			var slot, nargv *VPair
+			c_lock.Lock()
+			if called {
+				c_lock.Unlock()
+				nargv, slot = copy_arglist(depth, argv)
+			}else{
+				called = true
+				c_lock.Unlock()
+				nargv, slot = argv, na
+			}
+			slot.Car = va.Car
+			return next_call(nctx, nargv)
+		}}
+		return true
+	}
+	nargs := VPair{nil, VNil}
+	return argloop(ctx, &nargs, 0, args, &nargs)
 }
 
 func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
@@ -97,7 +115,8 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	make_reactivation := func(idx int) func(*Tail, *VPair) bool {
 		reassign := func(nctx *Tail, vals *VPair) bool {
 			*nctx = sctx
-			nargs := copy_arglist(idx, vals.Car, &(arglist[0]))
+			nargs, slot := copy_arglist(idx, &(arglist[0]))
+			slot.Car = vals.Car
 			return internal.Call(eval, nctx, nargs)
 		}
 		return func(nctx *Tail, vals *VPair) bool {
@@ -193,7 +212,8 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 	make_reactivation := func(idx int) func(*Tail, *VPair) bool {
 		reassign := func(nctx *Tail, vals *VPair) bool {
 			*nctx = sctx
-			nargs := copy_arglist(idx, vals.Car, &(arglist[0]))
+			nargs, slot := copy_arglist(idx, &(arglist[0]))
+			slot.Car = vals.Car
 			return internal.Call(eval, nctx, nargs)
 		}
 		return func(nctx *Tail, vals *VPair) bool {
