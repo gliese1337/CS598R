@@ -6,8 +6,13 @@ import (
 	"strconv"
 )
 
+type VValue interface {
+	Strict(*Tail) bool
+	String() string
+}
+
 type Tail struct {
-	Expr interface{}
+	Expr VValue
 	Env  *Environment
 	K    *Continuation
 }
@@ -16,40 +21,44 @@ func (t *Tail) Return(x *VPair) bool {
 	return t.K.Fn(t, x)
 }
 
-type Evaller func(interface{}, *Environment, *Continuation) interface{}
+type Evaller func(*Tail,bool)
 
 type Callable interface {
 	Call(Evaller, *Tail, *VPair) bool
 }
 
 type VSym string
-
+func (v VSym) Strict(ctx *Tail) bool {
+	ctx.Expr = v
+	return false
+}
 func (v VSym) String() string {
 	return string(v)
 }
 
 type VStr string
-
+func (v VStr) Strict(ctx *Tail) bool {
+	ctx.Expr = v
+	return false
+}
 func (v VStr) String() string {
 	return string(v)
 }
 
 type VNum float64
-
+func (v VNum) Strict(ctx *Tail) bool {
+	ctx.Expr = v
+	return false
+}
 func (v VNum) String() string {
 	return strconv.FormatFloat(float64(v), 'g', -1, 64)
 }
 
-/*
-func (v VNum) Call(eval Evaller, ctx *Tail args *VPair) {
-	//TODO: Make numbers look like church numerals
-	//Short cut- exponentiatiate if the arg is another number
-	//Does anything else make sense for non-integers?
-}
-*/
-
 type VBool bool
-
+func (v VBool) Strict(ctx *Tail) bool {
+	ctx.Expr = v
+	return false
+}
 func (v VBool) String() string {
 	if v {
 		return "#t"
@@ -78,7 +87,10 @@ type VPair struct {
 	Car interface{}
 	Cdr interface{}
 }
-
+func (v *VPair) Strict(ctx *Tail) bool {
+	ctx.Expr = v
+	return false
+}
 func (v *VPair) String() string {
 	if v == nil {
 		return "()"
@@ -105,3 +117,52 @@ write_rest:
 }
 
 var VNil *VPair = nil
+
+type Future struct {
+	channel chan VValue
+	lock sync.Mutex
+	result VValue
+	fulfilled bool
+	blocked map[*Tail]struct{}
+}
+func MakeFuture() *Future {
+	return &Future{
+		lock: new(sync.RWMutex),
+		blocked: make(map[*Tail]struct{})
+		result: nil
+		fulfilled: false
+	}
+}
+func (f *Future Fulfill(v VValue) {
+	f.lock.Lock()
+	if f.fulfilled {
+		f.lock.Unlock()
+		panic("Cannot fulfill future more than once.")
+	}
+	f.fulfilled = true
+	f.lock.Unlock()
+	f.result = v
+	for context, _ := range blocked {
+		delete(blocked,context)
+		go eval(context,false)
+	}
+	
+}
+func (f *Future) Strict(ctx *Tail) bool {
+	f.lock.RLock()
+	if f.fulfilled {
+		f.lock.RUnlock()
+		ctx.Expr = f.result
+		return false
+	}
+	f.lock.RUnlock
+	blocked[&Tail{f.result, ctx.Env, ctx.K}] = struct{}{}
+	ctx.K = nil
+	return false
+}
+func (f *Future) String() string {
+	if f.fulfilled {
+		return fmt.Sprintf("%v",f.Result)
+	}
+	return "<future>"
+}

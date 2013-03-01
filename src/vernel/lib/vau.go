@@ -123,8 +123,7 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 			c_lock.RLock()
 			if count > 0 {
 				c_lock.RUnlock()
-				context := Tail{nil, sctx.Env, &Continuation{"ArgK", reassign}}
-				blocked[&context] = struct{}{}
+				blocked[&Tail{vals.Car, sctx.Env, &Continuation{"ArgK", reassign}}] = struct{}{}
 				nctx.K = nil
 				return false
 			}
@@ -160,7 +159,8 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 			c_lock.Unlock()
 			//last one done, evaluate the body and anybody who blocked
 			for context, _ := range blocked {
-				go eval(context.Expr, context.Env, context.K)
+				delete(blocked,context)
+				go eval(context,false)
 			}
 			*nctx = sctx
 			return internal.Call(eval, nctx, &(arglist[0]))
@@ -172,23 +172,110 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	arglist[last_idx].Cdr = VNil
 	for i := 0; i < last_idx; i++ {
 		arglist[i].Cdr = &(arglist[i+1])
+		c_lock.Lock()
 		switch a := args.Car.(type) {
 		case *VPair:
 			go eval(a, ctx.Env, make_argk(i))
 		case VSym:
-			go eval(a, ctx.Env, make_argk(i))
+			arglist[i].Car = ctx.Env.Get(a)
+			count--
 		default:
 			arglist[i].Car = args.Car
-			c_lock.Lock()
 			count--
-			c_lock.Unlock()
 		}
+		c_lock.Unlock()
 		args = args.Cdr.(*VPair)
 	}
 	//reuse current goroutine for last argument
 	ctx.Expr = args.Car
 	ctx.K = make_argk(last_idx)
 	return true
+}
+
+func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
+	if args == nil {
+		return internal.Call(eval, ctx, VNil)
+	}
+	count, ok := 0, true
+	for a := args; a != nil && ok; a, ok = a.Cdr.(*VPair) {
+		count++
+	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
+
+	sctx := *ctx
+	blocked := make(map[*Tail]struct{})
+	arglist := make([]VPair, count, count)
+	done := false
+	d_lock := new(sync.RWMutex)
+
+	make_reactivation := func(idx int) func(*Tail, *VPair) bool {
+		reassign := func(nctx *Tail, vals *VPair) bool {
+			*nctx = sctx
+			nargs, slot := copy_arglist(idx, &(arglist[0]))
+			slot.Car = vals.Car
+			return internal.Call(eval, nctx, nargs)
+		}
+		return func(nctx *Tail, vals *VPair) bool {
+			d_lock.RLock()
+			if done {
+				d_lock.RUnlock()
+				return reassign(nctx, vals)
+			}
+			d_lock.RUnlock()
+			blocked[&Tail{vals.Car, sctx.Env, &Continuation{"ArgK", reassign}}] = struct{}{}
+			nctx.K = nil
+			return false
+		}
+	}
+	
+	func make_argk(idx int, f *Future) *Continuation {
+		var k Continuation
+		var reactivate func(*Tail, *VPair) bool
+		k_lock := new(sync.Mutex)
+		activated := false
+		k.Name = "ArgK"
+		k.Fn = func(nctx *Tail, vals *VPair) bool {
+			k_lock.Lock()
+			if activated {
+				k_lock.Unlock()
+				return reactivate(nctx, vals)
+			}
+			activated = true
+			f.Fulfill(vals.Car)
+			k_lock.Unlock()
+			reactivate = make_reactivation(idx)
+			k.Fn = reactivate
+			nctx.K = nil
+			return false
+		}
+		return &k
+	}
+	
+	arglist[count-1].Cdr = VNil
+	for i := 0; i < count; i++ {
+		arglist[i].Cdr = &(arglist[i+1])
+		switch a := args.Car.(type) {
+		case *VPair:
+			f := MakeFuture()
+			arglist[i].Car = MakeFuture(c)
+			go eval(a, ctx.Env, make_argk(i,f))
+		case VSym:
+			arglist[i].Car = ctx.Env.Get(a)
+		default:
+			arglist[i].Car = args.Car
+		}
+		args = args.Cdr.(*VPair)
+	}
+	d_lock.Lock()
+	done = true
+	d_lock.Unlock()
+	for context, _ := range blocked {
+		delete(blocked,context)
+		go eval(context,false)
+	}
+	return internal.Call(eval, &sctx, &(arglist[0]))
 }
 
 func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
@@ -223,8 +310,7 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 				return reassign(nctx, vals)
 			}
 			f_lock.RUnlock()
-			context := Tail{nil, sctx.Env, &Continuation{"ArgK", reassign}}
-			blocked[&context] = struct{}{}
+			blocked[&Tail{vals.Car, sctx.Env, &Continuation{"ArgK", reassign}}] = struct{}{}
 			nctx.K = nil
 			return false
 		}
@@ -276,7 +362,8 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 	finished = true
 	f_lock.Unlock()
 	for context, _ := range blocked {
-		go eval(context.Expr, context.Env, context.K)
+		delete(blocked,context)
+		go eval(context,false)
 	}
 	return internal.Call(eval, ctx, &(arglist[0]))
 }
@@ -311,7 +398,7 @@ func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair) bool) Callable {
 	}, &NativeFn{"wrapper", qwrapf}}
 }
 
-func qunwrap(eval Evaller, ctx *Tail, x *VPair) bool {
+func qunwrap(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
 		panic("No Arguments unwrap")
 	}

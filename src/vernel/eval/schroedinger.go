@@ -12,9 +12,8 @@ func proc_k(sctx Tail, args *VPair) *Continuation {
 		func(nctx *Tail, p *VPair) bool {
 			if p != nil {
 				if proc, ok := p.Car.(Callable); ok {
-					//fmt.Printf("Calling %v with arguments %v\n", proc, args)
 					*nctx = sctx
-					return proc.Call(Eval, nctx, args)
+					return proc.Call(eval_loop, nctx, args)
 				}
 			}
 			panic("Non-callable in function position")
@@ -23,11 +22,7 @@ func proc_k(sctx Tail, args *VPair) *Continuation {
 
 }
 
-func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
-	state := Tail{x, env, k}
-	evaluate := true
-	//_, f, l, _ := runtime.Caller(1)
-	//fmt.Printf("Eval called from %v:%v\n", f, l)
+func eval_loop(state *Tail, evaluate bool) {
 	for state.K != nil {
 		if evaluate {
 			switch xt := state.Expr.(type) {
@@ -47,5 +42,8 @@ func Eval(x interface{}, env *Environment, k *Continuation) interface{} {
 		}
 		evaluate = state.K.Fn(&state, &VPair{state.Expr, VNil})
 	}
-	return state.Expr
+}
+
+func Eval(x VValue, env *Environment, k *Continuation) {
+	eval_loop(&Tail{x, env, k},true)
 }

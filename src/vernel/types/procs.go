@@ -15,14 +15,6 @@ func (k *Continuation) String() string {
 	return fmt.Sprintf("<cont:%s>", k.Name)
 }
 
-var Top = &Continuation{
-	"Top",
-	func(ctx *Tail, args *VPair) bool {
-		ctx.Expr, ctx.K = args.Car, nil
-		return false
-	},
-}
-
 type NativeFn struct {
 	Name string
 	Fn   func(Evaller, *Tail, *VPair) bool
