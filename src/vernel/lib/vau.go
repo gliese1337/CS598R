@@ -33,7 +33,7 @@ func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 	return false
 }
 
-func copy_arglist(idx int, arglist *VPair) (*VPair,*VPair) {
+func copy_arglist(idx int, arglist *VPair) (*VPair, *VPair) {
 	/*copy cells up to the target, but keep the same tail; works as long as cells are immutable*/
 	first := *arglist
 	last := &first
@@ -52,26 +52,26 @@ func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	senv, sk := ctx.Env, ctx.K
 	var argloop func(*Tail, *VPair, int, *VPair, *VPair) bool
 	argloop = func(kctx *Tail, argv *VPair, depth int, oa *VPair, na *VPair) bool {
-		var next_call func(nctx *Tail, nargv *VPair) bool
+		var next_call func(*Tail, *VPair, *VPair) bool
 		next_arg, ok := oa.Cdr.(*VPair)
 		if !ok {
 			panic("Invalid Argument List")
-		}	
+		}
 		c_lock := new(sync.Mutex)
 		called := false
 		if next_arg == nil {
-			next_call = func(nctx *Tail, nargv *VPair) bool {
+			next_call = func(nctx *Tail, nargv *VPair, _ *VPair) bool {
 				nctx.Env, nctx.K = senv, sk
 				return internal.Call(eval, nctx, nargv)
 			}
-		}else{
-			next_call = func(nctx *Tail, nargv *VPair) bool {
+		} else {
+			next_call = func(nctx *Tail, nargv *VPair, slot *VPair) bool {
 				next_slot := &VPair{nil, VNil}
 				slot.Cdr = next_slot
 				return argloop(nctx, nargv, depth+1, next_arg, next_slot)
 			}
 		}
-		
+
 		//TODO: Why is restoring the environment necessary?
 		kctx.Expr, kctx.Env = oa.Car, senv
 		kctx.K = &Continuation{"arg", func(nctx *Tail, va *VPair) bool {
@@ -80,13 +80,13 @@ func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 			if called {
 				c_lock.Unlock()
 				nargv, slot = copy_arglist(depth, argv)
-			}else{
+			} else {
 				called = true
 				c_lock.Unlock()
 				nargv, slot = argv, na
 			}
 			slot.Car = va.Car
-			return next_call(nctx, nargv)
+			return next_call(nctx, nargv, slot)
 		}}
 		return true
 	}
@@ -159,8 +159,8 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 			c_lock.Unlock()
 			//last one done, evaluate the body and anybody who blocked
 			for context, _ := range blocked {
-				delete(blocked,context)
-				go eval(context,false)
+				delete(blocked, context)
+				go eval(context, false)
 			}
 			*nctx = sctx
 			return internal.Call(eval, nctx, &(arglist[0]))
@@ -175,7 +175,7 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 		c_lock.Lock()
 		switch a := args.Car.(type) {
 		case *VPair:
-			go eval(a, ctx.Env, make_argk(i))
+			go eval(&Tail{a, ctx.Env, make_argk(i)}, true)
 		case VSym:
 			arglist[i].Car = ctx.Env.Get(a)
 			count--
@@ -229,38 +229,36 @@ func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool
 			return false
 		}
 	}
-	
-	func make_argk(idx int, f *Future) *Continuation {
+
+	make_argk := func(idx int, f *Future) *Continuation {
 		var k Continuation
+		var k_lock sync.Mutex
 		var reactivate func(*Tail, *VPair) bool
-		k_lock := new(sync.Mutex)
-		activated := false
 		k.Name = "ArgK"
 		k.Fn = func(nctx *Tail, vals *VPair) bool {
 			k_lock.Lock()
-			if activated {
+			if reactivate != nil {
 				k_lock.Unlock()
 				return reactivate(nctx, vals)
 			}
-			activated = true
-			f.Fulfill(vals.Car)
-			k_lock.Unlock()
+			f.Fulfill(eval, vals.Car)
 			reactivate = make_reactivation(idx)
+			k_lock.Unlock()
 			k.Fn = reactivate
 			nctx.K = nil
 			return false
 		}
 		return &k
 	}
-	
+
 	arglist[count-1].Cdr = VNil
 	for i := 0; i < count; i++ {
 		arglist[i].Cdr = &(arglist[i+1])
 		switch a := args.Car.(type) {
 		case *VPair:
-			f := MakeFuture()
-			arglist[i].Car = MakeFuture(c)
-			go eval(a, ctx.Env, make_argk(i,f))
+			f := new(Future)
+			arglist[i].Car = f
+			go eval(&Tail{a, ctx.Env, make_argk(i, f)}, true)
 		case VSym:
 			arglist[i].Car = ctx.Env.Get(a)
 		default:
@@ -272,8 +270,8 @@ func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool
 	done = true
 	d_lock.Unlock()
 	for context, _ := range blocked {
-		delete(blocked,context)
-		go eval(context,false)
+		delete(blocked, context)
+		go eval(context, false)
 	}
 	return internal.Call(eval, &sctx, &(arglist[0]))
 }
@@ -341,7 +339,7 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 
 	//randomize evaluation order
 	//TODO: Somehow calculate optimal evaluation orders....
-	var argset map[int]interface{}
+	var argset map[int]VValue
 	arglist[count-1].Cdr = VNil
 	for i := 0; i < count; i++ {
 		arglist[i].Cdr = &(arglist[i+1])
@@ -351,9 +349,9 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 	for i, a := range argset {
 		switch at := a.(type) {
 		case *VPair:
-			eval(at, ctx.Env, make_argk(i))
+			eval(&Tail{at, ctx.Env, make_argk(i)}, true)
 		case VSym:
-			eval(at, ctx.Env, make_argk(i))
+			eval(&Tail{at, ctx.Env, make_argk(i)}, true)
 		default:
 			arglist[i].Car = a
 		}
@@ -362,8 +360,8 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 	finished = true
 	f_lock.Unlock()
 	for context, _ := range blocked {
-		delete(blocked,context)
-		go eval(context,false)
+		delete(blocked, context)
+		go eval(context, false)
 	}
 	return internal.Call(eval, ctx, &(arglist[0]))
 }

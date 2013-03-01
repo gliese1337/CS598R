@@ -7,7 +7,7 @@ import (
 	. "vernel/types"
 )
 
-func parse_special(in string) interface{} {
+func parse_special(in string) VValue {
 	switch in {
 	case "#t":
 		return VBool(true)
@@ -20,7 +20,7 @@ func parse_special(in string) interface{} {
 	return nil
 }
 
-func parse_list(l *lexer.Lexer) (interface{}, bool) {
+func parse_list(l *lexer.Lexer) (VValue, bool) {
 	token := l.Peek()
 	switch token.Type {
 	case ")":
@@ -45,7 +45,7 @@ func parse_list(l *lexer.Lexer) (interface{}, bool) {
 	return nil, false
 }
 
-func parse(l *lexer.Lexer) (interface{}, bool) {
+func parse(l *lexer.Lexer) (VValue, bool) {
 	token := l.Next()
 	switch token.Type {
 	case "symbol":
@@ -73,8 +73,8 @@ func parse(l *lexer.Lexer) (interface{}, bool) {
 	return nil, false
 }
 
-func Parse(inc chan rune) chan interface{} {
-	outc := make(chan interface{})
+func Parse(inc chan rune) chan VValue {
+	var outc chan VValue
 	lex := lexer.Lex(inc)
 	go (func() {
 	loop:

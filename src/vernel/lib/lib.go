@@ -5,7 +5,7 @@ import . "vernel/types"
 func GetBuiltins() *Environment {
 	return NewEnv(
 		nil,
-		map[VSym]interface{}{
+		map[VSym]VValue{
 			VSym("def"):      &NativeFn{"define", def},
 			VSym("qcons"):    &NativeFn{"qcons", qcons},
 			VSym("qcar"):     &NativeFn{"qcar", qcar},

@@ -30,10 +30,16 @@ func timer(eval Evaller, ctx *Tail, x *VPair) bool {
 		panic("Invalid timer expression.")
 	}
 	start := time.Now()
-	val := eval(expr.Car, ctx.Env, Top)
-	fmt.Printf("%s ran in %v.\n", label, time.Since(start))
-	ctx.Expr = val
-	return false
+	//TODO: Auto-sequence
+	sk := ctx.K
+	ctx.Expr = expr.Car
+	ctx.K = &Continuation{"TimerK", func(nctx *Tail, vals *VPair) bool {
+		fmt.Printf("%s ran in %v.\n", label, time.Since(start))
+		nctx.Expr = vals.Car
+		nctx.K = sk
+		return false
+	}}
+	return true
 }
 
 func qand(_ Evaller, ctx *Tail, x *VPair) bool {
@@ -380,7 +386,7 @@ func load_env(eval Evaller, env *Environment, fname string) {
 		close(inchan)
 	}()
 	for expr := range parser.Parse(inchan) {
-		eval(expr, env, Top)
+		eval(&Tail{expr, env, nil}, true)
 	}
 }
 
@@ -427,7 +433,7 @@ func qimport(eval Evaller, ctx *Tail, x *VPair) bool {
 }
 
 func abort(_ Evaller, ctx *Tail, x *VPair) bool {
-	ctx.K = Top
+	ctx.K = nil
 	if x == nil {
 		ctx.Expr = VNil
 		return false
@@ -449,7 +455,7 @@ func bindcc(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No body provided to bind/cc")
 	}
 	sk, senv := ctx.K, ctx.Env
-	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]interface{}{
+	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]VValue{
 		k_sym: &Applicative{func(_ Callable, _ Evaller, nctx *Tail, args *VPair) bool {
 			if args == nil {
 				return sk.Fn(nctx, VNil)
@@ -537,7 +543,7 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	if !ok {
 		panic("Non-list argument to def")
 	}
-	var val interface{}
+	var val VValue
 	if rest == nil {
 		val = VNil
 	} else {

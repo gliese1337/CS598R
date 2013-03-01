@@ -35,15 +35,22 @@ func eval_loop(state *Tail, evaluate bool) {
 						panic(fmt.Sprintf("Non-list \"%s\" in argument position", xt.Cdr))
 					}
 					//fmt.Printf("Evaluating procedure expression: %v\n", xt.Car)
-					state.Expr, state.K = xt.Car, proc_k(state, arglist)
+					state.Expr, state.K = xt.Car, proc_k(*state, arglist)
 					continue
 				}
 			}
 		}
-		evaluate = state.K.Fn(&state, &VPair{state.Expr, VNil})
+		evaluate = state.K.Fn(state, &VPair{state.Expr, VNil})
 	}
 }
 
-func Eval(x VValue, env *Environment, k *Continuation) {
-	eval_loop(&Tail{x, env, k},true)
+func Eval(x VValue, env *Environment, cb func(*VPair)) {
+	eval_loop(&Tail{x, env, &Continuation{
+		"Top",
+		func(ctx *Tail, vals *VPair) bool {
+			cb(vals)
+			ctx.K = nil
+			return false
+		},
+	}}, true)
 }

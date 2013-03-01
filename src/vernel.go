@@ -70,17 +70,11 @@ func main() {
 		close(inchan)
 	}()
 	env := lib.GetBuiltins()
-	reschan := make(chan interface{})
 	for expr := range parser.Parse(inchan) {
-		fmt.Printf("%s ->\n", expr)
-		go eval.Eval(expr, env, &types.Continuation{
-			"Top",
-			func(ctx *types.Tail, vals *types.VPair) bool {
-				reschan <- vals.Car
-				ctx.K = nil
-				return false
-			},
-		})
-		fmt.Printf("\t%s\n", <-reschan)
+		eval.Eval(expr, env, func(e types.VValue) func(*types.VPair) {
+			return func(vals *types.VPair) {
+				fmt.Printf("%s ->\n\t%s\n", e, vals.Car)
+			}
+		}(expr))
 	}
 }
