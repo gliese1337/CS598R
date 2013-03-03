@@ -2,23 +2,20 @@ package eval
 
 import (
 	"fmt"
-	//"runtime"
 	. "vernel/types"
 )
 
 func proc_k(sctx Tail, args *VPair) *Continuation {
-	return &Continuation{
-		"call",
-		func(nctx *Tail, p *VPair) bool {
-			if p != nil {
-				if proc, ok := p.Car.(Callable); ok {
-					*nctx = sctx
-					return proc.Call(eval_loop, nctx, args)
-				}
+	return &Continuation{"call", func(nctx *Tail, p ...VValue) bool {
+		nctx.K = &Continuation{"call",func(kctx *Tail, f ..VValue) bool {
+			if proc, ok := f[0].(Callable); ok {
+				*kctx = sctx
+				return proc.Call(eval_loop, nctx, args)
 			}
 			panic("Non-callable in function position")
-		},
-	}
+		}}
+		return p[0].Strict(nctx)
+	}}
 
 }
 
@@ -30,17 +27,12 @@ func eval_loop(state *Tail, evaluate bool) {
 				state.Expr = state.Env.Get(xt)
 			case *VPair:
 				if xt != nil {
-					arglist, ok := xt.Cdr.(*VPair)
-					if !ok {
-						panic(fmt.Sprintf("Non-list \"%s\" in argument position", xt.Cdr))
-					}
-					//fmt.Printf("Evaluating procedure expression: %v\n", xt.Car)
-					state.Expr, state.K = xt.Car, proc_k(*state, arglist)
+					state.Expr, state.K = xt.Car, proc_k(*state, xt.Cdr)
 					continue
 				}
 			}
 		}
-		evaluate = state.K.Fn(state, &VPair{state.Expr, VNil})
+		evaluate = state.K.Fn(state, state.Expr)
 	}
 }
 

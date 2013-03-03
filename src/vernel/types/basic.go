@@ -21,7 +21,7 @@ type Evaller func(*Tail, bool)
 
 type Callable interface {
 	VValue
-	Call(Evaller, *Tail, *VPair) bool
+	Call(Evaller, *Tail, VValue) bool
 }
 
 type VSym string

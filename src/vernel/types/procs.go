@@ -4,11 +4,16 @@ import "fmt"
 
 type Continuation struct {
 	Name string
-	Fn   func(*Tail, *VPair) bool
+	Fn   func(*Tail, ...VValue) bool
 }
 
-func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) bool {
-	return k.Fn(ctx, x)
+func (k *Continuation) Call(_ Evaller, ctx *Tail, x VValue) bool {
+	sk := ctx.K
+	ctx.K = &Continuation{"kcall",func(nctx *Tail, v ...VValue) bool {
+		nctx.K = sk
+		k.Fn(nctx, v...)
+	}}
+	return x.Strict(ctx)
 }
 func (k *Continuation) Strict(ctx *Tail) bool {
 	ctx.Expr = k
@@ -23,7 +28,7 @@ type NativeFn struct {
 	Fn   func(Evaller, *Tail, *VPair) bool
 }
 
-func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) bool {
+func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x VValue) bool {
 	return nfn.Fn(eval, ctx, x)
 }
 func (nfn *NativeFn) Strict(ctx *Tail) bool {
@@ -34,7 +39,7 @@ func (nfn *NativeFn) String() string {
 	return fmt.Sprintf("<native:%s>", nfn.Name)
 }
 
-func match_args(fs VValue, a *VPair) map[VSym]VValue {
+func match_args(eval Evaller, fs VValue, a VValue) map[VSym]VValue {
 	var m map[VSym]VValue
 	switch f := fs.(type) {
 	case *VPair:
@@ -80,7 +85,7 @@ type Combiner struct {
 	Body    *VPair
 }
 
-func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
+func (c *Combiner) Call(eval Evaller, ctx *Tail, args VValue) bool {
 	arg_map := match_args(c.Formals, args)
 	if c.Body == nil {
 		ctx.Expr = VNil

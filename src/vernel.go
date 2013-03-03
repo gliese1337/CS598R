@@ -70,11 +70,11 @@ func main() {
 		close(inchan)
 	}()
 	env := lib.GetBuiltins()
+	top := func(vals *types.VPair) {
+		fmt.Printf("%s\n", vals.Car)
+	}
+	//TODO: allow top-level continuations
 	for expr := range parser.Parse(inchan) {
-		eval.Eval(expr, env, func(e types.VValue) func(*types.VPair) {
-			return func(vals *types.VPair) {
-				fmt.Printf("%s ->\n\t%s\n", e, vals.Car)
-			}
-		}(expr))
+		eval.Eval(expr, env, top)
 	}
 }
