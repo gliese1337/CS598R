@@ -4,11 +4,18 @@ import "fmt"
 
 type Continuation struct {
 	Name string
-	Fn   func(*Tail, *VPair) bool
+	Argc int
+	Variadic bool
+	Fn   func(*Tail, ...VValue) bool
 }
-
-func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) bool {
-	return k.Fn(ctx, x)
+func (k *Continuation) Arity() (int,bool){
+	return k.Argc,k.Variadic
+}
+func (k *Continuation) Call(_ Evaller, ctx *Tail, x ...VValue) bool {
+	if len(x) < k.Argc || (!k.Variadic && len(x) > k.Argc) {
+		panic(fmt.Sprintf("%d values in %d-value context",len(x),k.Argc))
+	}
+	return k.Fn(ctx, x...)
 }
 func (k *Continuation) Strict(ctx *Tail) bool {
 	ctx.Expr = k
@@ -20,11 +27,15 @@ func (k *Continuation) String() string {
 
 type NativeFn struct {
 	Name string
-	Fn   func(Evaller, *Tail, *VPair) bool
+	Argc int
+	Variadic bool
+	Fn   func(Evaller, *Tail, ...VValue) bool
 }
-
-func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) bool {
-	return nfn.Fn(eval, ctx, x)
+func (nfn *NativeFn) Arity() (int,bool) {
+	return nfn.Argc,nfn.Variadic
+}
+func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x ...VValue) bool {
+	return nfn.Fn(eval, ctx, x...)
 }
 func (nfn *NativeFn) Strict(ctx *Tail) bool {
 	ctx.Expr = nfn
@@ -34,55 +45,39 @@ func (nfn *NativeFn) String() string {
 	return fmt.Sprintf("<native:%s>", nfn.Name)
 }
 
-func match_args(fs VValue, a *VPair) map[VSym]VValue {
+func match_args(fs []VValue, a []VValue) map[VSym]VValue {
 	var m map[VSym]VValue
-	switch f := fs.(type) {
-	case *VPair:
-		for f != nil {
-			if a == nil {
-				panic("Too few arguments")
+	for i, s := range fs {
+		switch st := s.(type) {
+		case VSym:
+			if string(st) != "##" {
+				m[st] = a[i]
 			}
-			s, ok := f.Car.(VSym)
-			if !ok {
-				panic("Cannot bind to non-symbol")
-			}
-			if string(s) != "##" {
-				m[s] = a.Car
-			}
-
-			ap, ok := a.Cdr.(*VPair)
-			switch fp := f.Cdr.(type) {
-			case *VPair:
-				f, a = fp, ap
-			case VSym:
-				if ok {
-					if string(fp) != "##" {
-						m[fp] = ap
-					}
-					f = nil
-				}
-			}
+		case *VPair:
+			panic("Destructuring not yet implemented")
+		default:
+			panic("Invalid binding")
 		}
-	case VSym:
-		if string(f) != "##" {
-			m[f] = a
-		}
-	default:
-		panic("Invalid formals!")
 	}
 	return m
 }
 
 type Combiner struct {
 	Cenv    *Environment
-	Formals VValue
+	Formals []VValue
 	Dsym    VSym
-	Body    *VPair
+	Variadic bool
+	Body    []VValue
 }
-
-func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
+func (c *Combiner) Arity() (int,bool) {
+	if c.Variadic {
+		return len(c.Formals)-1,true
+	}
+	return len(c.Formals),false
+}
+func (c *Combiner) Call(_ Evaller, ctx *Tail, args ...VValue) bool {
 	arg_map := match_args(c.Formals, args)
-	if c.Body == nil {
+	if len(c.Body) == 0 {
 		ctx.Expr = VNil
 		return false
 	}
@@ -90,27 +85,29 @@ func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 		arg_map[c.Dsym] = WrapEnv(ctx.Env)
 	}
 	senv, sk := NewEnv(c.Cenv, arg_map), ctx.K
-	var eloop func(*Tail, *VPair) bool
-	eloop = func(kctx *Tail, body *VPair) bool {
-		var cfunc func(*Tail, *VPair) bool
-		next_expr, ok := body.Cdr.(*VPair)
-		if !ok {
-			panic("Invalid Function Body")
-		}
-		if next_expr == nil {
-			cfunc = func(nctx *Tail, va *VPair) bool {
-				nctx.Expr, nctx.K = va.Car, sk
+	var eloop func(*Tail, ...VValue) bool
+	eloop = func(kctx *Tail, body ...VValue) bool {
+		var cfunc func(*Tail, ...VValue) bool
+		if len(body) == 1 {
+			cfunc = func(nctx *Tail, va ...VValue) bool {
+				nctx.Expr, nctx.K = va[0], sk
 				return false
 			}
 		} else {
-			cfunc = func(nctx *Tail, va *VPair) bool {
-				return eloop(nctx, next_expr)
+			cfunc = func(nctx *Tail, _ ...VValue) bool {
+				return eloop(nctx, body[1:]...)
 			}
 		}
-		kctx.Expr, kctx.Env, kctx.K = body.Car, senv, &Continuation{"arg", cfunc}
+		kctx.Expr, kctx.Env = body[0], senv
+		kctx.K = &Continuation{
+			Name: "arg",
+			Argc: 1,
+			Variadic: false,
+			Fn: cfunc,
+		}
 		return true
 	}
-	return eloop(ctx, c.Body)
+	return eloop(ctx, c.Body...)
 }
 func (c *Combiner) Strict(ctx *Tail) bool {
 	ctx.Expr = c
@@ -121,12 +118,14 @@ func (c *Combiner) String() string {
 }
 
 type Applicative struct {
-	Wrapper  func(Callable, Evaller, *Tail, *VPair) bool
+	Wrapper  func(Callable, Evaller, *Tail, ...VValue) bool
 	Internal Callable
 }
-
-func (a *Applicative) Call(eval Evaller, ctx *Tail, args *VPair) bool {
-	return a.Wrapper(a.Internal, eval, ctx, args)
+func (a *Applicative) Arity() (int,bool) {
+	return a.Internal.Arity()
+}
+func (a *Applicative) Call(eval Evaller, ctx *Tail, args ...VValue) bool {
+	return a.Wrapper(a.Internal, eval, ctx, args...)
 }
 func (a *Applicative) Strict(ctx *Tail) bool {
 	ctx.Expr = a

@@ -3,55 +3,70 @@ package lib
 import . "vernel/types"
 import "sync"
 
-func vau(_ Evaller, ctx *Tail, x *VPair) bool {
-	if x == nil {
-		panic("No Arguments to vau")
+func flatten(x *VPair) ([]VValue, bool) {
+	count := 0
+	tail := false
+	for cx := x; cx != nil; {
+		count++
+		cx, ok := cx.Cdr.(*VPair)
+		if !ok {
+			tail = true
+		}
 	}
-	_, islist := x.Car.(*VPair)
-	_, issym := x.Car.(VSym)
-	if !(islist || issym) {
+	if tail {
+		slice := make([]VValue, count+1)
+		for i := 0; x != nil; i++ {
+			slice[i] = x.Car
+			nx, _ := x.Cdr.(*VPair)
+			if nx == nil {
+				slice[count] = x.Cdr
+			}
+			x = nx
+		}
+		return slice, true
+	}
+	slice := make([]VValue, count)
+	for i := 0; x != nil; i++ {
+		slice[i] = x.Car
+		x, _ := x.Cdr.(*VPair)
+	}
+	return slice, false
+}
+
+func vau(_ Evaller, ctx *Tail, x ...VValue) bool
+	var formals []VValue
+	var variadic bool
+	if _, islist := x[0].(*VPair); islist {
+		formals, variadic = flatten(x[0])
+	} else if _, issym := x[0].(VSym); issym {
+		formals, variadic = []VValue{x[0]}, true
+	} else {
 		panic("Invalid Argument Declaration")
 	}
-	sym_rest, ok := x.Cdr.(*VPair)
-	if !ok {
-		panic("Invalid Arguments to vau")
-	}
-	dsym, ok := sym_rest.Car.(VSym)
+	dsym, ok := x[1].(VSym)
 	if !ok {
 		panic("Missing Dynamic Environment Binding")
 	}
-	rest, ok := sym_rest.Cdr.(*VPair)
-	if !ok {
-		panic("Missing Vau Expression Body")
+	body, tail := flatten(x[2])
+	if tail {
+		panic("Invalid Vau Body Expression")
 	}
 	ctx.Expr = &Combiner{
 		Cenv:    ctx.Env,
-		Formals: x.Car,
+		Formals: formals,
 		Dsym:    dsym,
-		Body:    rest,
+		Body:    body,
 	}
 	return false
 }
 
-func copy_arglist(idx int, arglist *VPair) (*VPair, *VPair) {
-	/*copy cells up to the target, but keep the same tail; works as long as cells are immutable*/
-	first := *arglist
-	last := &first
-	for i := 1; i <= idx; i++ {
-		next := *last.Cdr.(*VPair) /*copy next cell*/
-		last.Cdr = &next           /*hook up to previous copied cell*/
-		last = &next
-	}
-	return &first, last
-}
-
-func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
-	if args == nil {
-		return internal.Call(eval, ctx, VNil)
+func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args ...VValue) bool {
+	if len(args) == 0 {
+		return internal.Call(eval, ctx, args...)
 	}
 	senv, sk := ctx.Env, ctx.K
-	var argloop func(*Tail, *VPair, int, *VPair, *VPair) bool
-	argloop = func(kctx *Tail, argv *VPair, depth int, oa *VPair, na *VPair) bool {
+	var argloop func(*Tail, int) bool
+	argloop = func(kctx *Tail, depth int) bool {
 		var next_call func(*Tail, *VPair, *VPair) bool
 		next_arg, ok := oa.Cdr.(*VPair)
 		if !ok {
@@ -91,7 +106,7 @@ func rtlWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 		return true
 	}
 	nargs := VPair{nil, VNil}
-	return argloop(ctx, &nargs, 0, args, &nargs)
+	return argloop(ctx, 0)
 }
 
 func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {

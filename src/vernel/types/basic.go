@@ -21,7 +21,8 @@ type Evaller func(*Tail, bool)
 
 type Callable interface {
 	VValue
-	Call(Evaller, *Tail, *VPair) bool
+	Call(Evaller, *Tail, ...VValue) bool
+	Arity() (int,bool)
 }
 
 type VSym string
@@ -66,20 +67,14 @@ func (v VBool) String() string {
 	}
 	return "#f"
 }
-
-func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) bool {
-	if args == nil {
-		ctx.Expr = VNil
+func (v VBool) Arity() (int,bool) {
+	return 2, false
+}
+func (v VBool) Call(eval Evaller, ctx *Tail, args ...VValue) bool {
+	if bool(v) {
+		ctx.Expr = args[0]
 	} else {
-		cdr, ok := args.Cdr.(*VPair)
-		if !ok || cdr == nil {
-			panic(fmt.Sprintf("Invalid Arguments to Branch: %v", args))
-		}
-		if bool(v) {
-			ctx.Expr = args.Car
-		} else {
-			ctx.Expr = cdr.Car
-		}
+		ctx.Expr = args[1]
 	}
 	return true
 }

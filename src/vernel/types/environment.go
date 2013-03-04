@@ -57,11 +57,11 @@ func (env *Environment) Set(x VSym, y VValue) VValue {
 	return y
 }
 
-func (env *Environment) Call(_ Evaller, ctx *Tail, args *VPair) bool {
-	if args == nil {
-		panic("No argument to evaluation")
-	}
-	ctx.Expr, ctx.Env = args.Car, env
+func (env *Environment) Arity() (int,bool) {
+	return 1,false
+}
+func (env *Environment) Call(_ Evaller, ctx *Tail, args ...VValue) bool {
+	ctx.Expr, ctx.Env = args[0], env
 	return true
 }
 
@@ -70,20 +70,21 @@ func NewEnv(p *Environment, v map[VSym]VValue) *Environment {
 }
 
 func WrapEnv(p *Environment) *Applicative {
-	return &Applicative{func(_ Callable, _ Evaller, ctx *Tail, cargs *VPair) bool {
-		if cargs == nil {
-			ctx.Expr = VNil
-		} else {
+	return &Applicative{
+		Internal: p,
+		Wrapper: func(env Callable, _ Evaller, ctx *Tail, cargs ...VValue) bool {
 			sctx := *ctx
-			ctx.Expr, ctx.K = cargs.Car, &Continuation{
-				"eval",
-				func(nctx *Tail, v *VPair) bool {
-					evaluate := p.Call(nil, &sctx, v)
+			ctx.Expr, ctx.K = cargs[0], &Continuation{
+				Name: "eval",
+				Argc: 1,
+				Variadic: false,
+				Fn: func(nctx *Tail, v ...VValue) bool {
+					evaluate := env.Call(nil, &sctx, v...)
 					*nctx = sctx
 					return evaluate
 				},
 			}
-		}
-		return true
-	}, p}
+			return true
+		},
+	}
 }
