@@ -6,19 +6,20 @@ import (
 	"strconv"
 )
 
+type VValue interface {
+	String() string
+}
+
 type Tail struct {
-	Expr interface{}
+	Expr VValue
 	Env  *Environment
 	K    *Continuation
 }
 
-func (t *Tail) Return(x *VPair) bool {
-	return t.K.Fn(t, x)
-}
-
-type Evaller func(interface{}, *Environment, *Continuation) interface{}
+type Evaller func(*Tail, bool)
 
 type Callable interface {
+	VValue
 	Call(Evaller, *Tail, *VPair) bool
 }
 
@@ -39,14 +40,6 @@ type VNum float64
 func (v VNum) String() string {
 	return strconv.FormatFloat(float64(v), 'g', -1, 64)
 }
-
-/*
-func (v VNum) Call(eval Evaller, ctx *Tail args *VPair) {
-	//TODO: Make numbers look like church numerals
-	//Short cut- exponentiatiate if the arg is another number
-	//Does anything else make sense for non-integers?
-}
-*/
 
 type VBool bool
 
@@ -75,8 +68,8 @@ func (v VBool) Call(eval Evaller, ctx *Tail, args *VPair) bool {
 }
 
 type VPair struct {
-	Car interface{}
-	Cdr interface{}
+	Car VValue
+	Cdr VValue
 }
 
 func (v *VPair) String() string {

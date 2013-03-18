@@ -554,6 +554,22 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	return true
 }
+
+func acc_syms(sset *(map[string]struct{}), arg interface{}) {
+	for arg != nil {
+		switch a := arg.(type) {
+		case *VPair:
+			acc_syms(sset, a.Car)
+			arg = a.Cdr
+		case VSym:
+			(*sset)[string(a)] = struct{}{}
+			arg = nil
+		default:
+			arg = nil
+		}
+	}
+}
+
 func unique(_ Evaller, ctx *Tail, x *VPair) bool {
 	var sset map[string]struct{}
 	acc_syms(&sset, x)

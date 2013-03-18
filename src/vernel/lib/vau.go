@@ -1,6 +1,7 @@
 package lib
 
 import . "vernel/types"
+import "sync"
 
 func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {
