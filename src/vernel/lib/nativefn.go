@@ -348,6 +348,56 @@ func qisapp(_ Evaller, ctx *Tail, x *VPair) bool {
 	ctx.Expr = VBool(ok)
 	return false
 }
+func qislazy(_ Evaller, ctx *Tail, x *VPair) bool {
+	_, ok := x.Car.(Deferred)
+	ctx.Expr = VBool(ok)
+	return false
+}
+func qisthunk(_ Evaller, ctx *Tail, x *VPair) bool {
+	_, ok := x.Car.(*Thunk)
+	ctx.Expr = VBool(ok)
+	return false
+}
+func qisfuture(_ Evaller, ctx *Tail, x *VPair) bool {
+	_, ok := x.Car.(*Future)
+	ctx.Expr = VBool(ok)
+	return false
+}
+
+func vdefer(_ Evaller, ctx *Tail, x *VPair) bool {
+	ctx.Expr = MakeThunk(x.Car, ctx.Env, ctx.K)
+	return false
+}
+
+func spawn(eval Evaller, ctx *Tail, x *VPair) bool {
+	var k_lock sync.Mutex
+	activated := false
+	senv, sk := ctx.Env, ctx.K
+	f := new(Future)
+	ctx.Expr = f
+	go eval(&Tail{x.Car, ctx.Env, &Continuation{"FutureK", func(nctx *Tail, vals *VPair) bool {
+		k_lock.Lock()
+		if activated {
+			k_lock.Unlock()
+			nctx.Expr, nctx.Env, nctx.K = vals.Car, senv, sk
+			return false
+		}
+		activated = true
+		k_lock.Unlock()
+		f.Fulfill(eval, vals.Car)
+		nctx.K = nil
+		return false
+	}}}, true)
+	return false
+}
+
+func qstrict(eval Evaller, ctx *Tail, x *VPair) bool {
+	if d, ok := x.Car.(Deferred); ok {
+		return d.Strict(eval, ctx)
+	}
+	ctx.Expr = x.Car
+	return false
+}
 
 func qread(_ Evaller, ctx *Tail, x *VPair) bool {
 	if x == nil {

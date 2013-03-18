@@ -192,6 +192,134 @@ func syncWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	return true
 }
 
+func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
+	if args == nil {
+		return internal.Call(eval, ctx, VNil)
+	}
+	count, ok := 0, true
+	for a := args; a != nil && ok; a, ok = a.Cdr.(*VPair) {
+		count++
+	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
+
+	sctx := *ctx
+	blocked := make(map[*Tail]struct{})
+	arglist := make([]VPair, count, count)
+	done := false
+	d_lock := new(sync.RWMutex)
+
+	make_reactivation := func(idx int) func(*Tail, *VPair) bool {
+		reassign := func(nctx *Tail, vals *VPair) bool {
+			*nctx = sctx
+			nargs, slot := copy_arglist(idx, &(arglist[0]))
+			slot.Car = vals.Car
+			return internal.Call(eval, nctx, nargs)
+		}
+		return func(nctx *Tail, vals *VPair) bool {
+			d_lock.RLock()
+			if done {
+				d_lock.RUnlock()
+				return reassign(nctx, vals)
+			}
+			d_lock.RUnlock()
+			blocked[&Tail{vals.Car, sctx.Env, &Continuation{"ArgK", reassign}}] = struct{}{}
+			nctx.K = nil
+			return false
+		}
+	}
+
+	make_argk := func(idx int, f *Future) *Continuation {
+		var k Continuation
+		var k_lock sync.Mutex
+		var reactivate func(*Tail, *VPair) bool
+		k.Name = "ArgK"
+		k.Fn = func(nctx *Tail, vals *VPair) bool {
+			k_lock.Lock()
+			if reactivate != nil {
+				k_lock.Unlock()
+				return reactivate(nctx, vals)
+			}
+			f.Fulfill(eval, vals.Car)
+			reactivate = make_reactivation(idx)
+			k_lock.Unlock()
+			k.Fn = reactivate
+			nctx.K = nil
+			return false
+		}
+		return &k
+	}
+
+	arglist[count-1].Cdr = VNil
+	for i := 0; i < count-1; i++ {
+		arglist[i].Cdr = &(arglist[i+1])
+	}
+	for i := 0; i < count; i++ {
+		switch a := args.Car.(type) {
+		case *VPair:
+			f := new(Future)
+			arglist[i].Car = f
+			go eval(&Tail{a, ctx.Env, make_argk(i, f)}, true)
+		case VSym:
+			arglist[i].Car = ctx.Env.Get(a)
+		default:
+			arglist[i].Car = args.Car
+		}
+		args = args.Cdr.(*VPair)
+	}
+	d_lock.Lock()
+	done = true
+	d_lock.Unlock()
+	for context, _ := range blocked {
+		delete(blocked, context)
+		go eval(context, false)
+	}
+	return internal.Call(eval, &sctx, &(arglist[0]))
+}
+
+func lazyWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
+	if args == nil {
+		return internal.Call(eval, ctx, VNil)
+	}
+	count, ok := 0, true
+	for a := args; a != nil && ok; a, ok = a.Cdr.(*VPair) {
+		count++
+	}
+	if !ok {
+		panic("Invalid Argument List")
+	}
+
+	sctx := *ctx
+	arglist := make([]VPair, count, count)
+
+	make_reactivation := func(idx int) *Continuation {
+		return &Continuation{"Thunk", func(ctx *Tail, vals *VPair) bool {
+			*ctx = sctx
+			nargs, slot := copy_arglist(idx, &(arglist[0]))
+			slot.Car = vals.Car
+			return internal.Call(eval, ctx, nargs)
+		}}
+	}
+
+	arglist[count-1].Cdr = VNil
+	for i := 0; i < count-1; i++ {
+		arglist[i].Cdr = &(arglist[i+1])
+	}
+	for i := 0; i < count; i++ {
+		switch a := args.Car.(type) {
+		case *VPair:
+			arglist[i].Car = MakeThunk(a, ctx.Env, make_reactivation(i))
+		case VSym:
+			arglist[i].Car = ctx.Env.Get(a)
+		default:
+			arglist[i].Car = args.Car
+		}
+		args = args.Cdr.(*VPair)
+	}
+	return internal.Call(eval, &sctx, &(arglist[0]))
+}
+
 func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool {
 	if args == nil {
 		return internal.Call(eval, ctx, VNil)

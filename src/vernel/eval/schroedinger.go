@@ -2,29 +2,39 @@ package eval
 
 import (
 	"fmt"
-	//"runtime"
 	. "vernel/types"
 )
 
 func proc_k(sctx Tail, args *VPair) *Continuation {
-	return &Continuation{
-		"call",
-		func(nctx *Tail, p *VPair) bool {
-			if p != nil {
-				if proc, ok := p.Car.(Callable); ok {
-					*nctx = sctx
-					return proc.Call(eval_loop, nctx, args)
-				}
+	var callk func(*Tail, *VPair) bool
+	callk = func(nctx *Tail, p *VPair) bool {
+		if p != nil {
+			if d, ok := p.Car.(Deferred); ok {
+				senv, sk := nctx.Env, nctx.K
+				nctx.K = &Continuation{"StrictK", func(kctx *Tail, vals *VPair) bool {
+					kctx.Env, kctx.K = senv, sk
+					return callk(kctx, vals)
+				}}
+				return d.Strict(eval_loop, nctx)
 			}
-			panic("Non-callable in function position")
-		},
+			if proc, ok := p.Car.(Callable); ok {
+				*nctx = sctx
+				return proc.Call(eval_loop, nctx, args)
+			}
+		}
+		panic("Non-callable in function position")
 	}
-
+	return &Continuation{"call", callk}
 }
 
 func eval_loop(state *Tail, evaluate bool) {
 	for state.K != nil {
 		if evaluate {
+			//TODO: wrap in thunk to propagate laziness
+			if d, ok := state.Expr.(Deferred); ok {
+				evaluate = d.Strict(eval_loop, state)
+				continue
+			}
 			switch xt := state.Expr.(type) {
 			case VSym:
 				state.Expr = state.Env.Get(xt)
