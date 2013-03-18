@@ -13,7 +13,9 @@ func GetBuiltins() *Environment {
 			VSym("vau"):      &NativeFn{"vau", vau},
 			VSym("bind/cc"):  &NativeFn{"bind/cc", bindcc},
 			VSym("qunwrap"):  &NativeFn{"qunwrap", qunwrap},
-			VSym("wrap/rtl"): wrap_gen(rtlWrapper),
+			VSym("wrap/ltr"): wrap_gen(ltrWrapper),
+			VSym("wrap/snc"): wrap_gen(syncWrapper),
+			VSym("wrap"):     wrap_gen(basicWrapper),
 			VSym("qprint"):   &NativeFn{"qprint", qprint},
 			VSym("last"):     &NativeFn{"last", last},
 			VSym("qlist"):    &NativeFn{"qlist", qlist},
@@ -39,5 +41,7 @@ func GetBuiltins() *Environment {
 			VSym("qpair?"):   &NativeFn{"qpair?", qispair},
 			VSym("timer"):    &NativeFn{"timer", timer},
 			VSym("panic"):    &NativeFn{"panic", vpanic},
+			VSym("abort"):    &NativeFn{"abort", abort},
+			VSym("qunique"):  &NativeFn{"qunique", unique},
 		})
 }

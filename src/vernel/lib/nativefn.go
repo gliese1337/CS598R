@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 	"vernel/parser"
 	. "vernel/types"
@@ -147,7 +148,7 @@ func qdiv(_ Evaller, ctx *Tail, x *VPair) bool {
 	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
-			panic("Non-numeric argument to qmul")
+			panic("Non-numeric argument to qdiv")
 		}
 		ret /= float64(b)
 	}
@@ -553,12 +554,29 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	return true
 }
+func unique(_ Evaller, ctx *Tail, x *VPair) bool {
+	var sset map[string]struct{}
+	acc_syms(&sset, x)
+	cntr := 0
+gen_str:
+	ustr := fmt.Sprintf("u%x", cntr)
+	if _, ok := sset[ustr]; ok {
+		cntr++
+		goto gen_str
+	}
+	ctx.Expr = VSym(ustr)
+	return false
+}
+
+var p_lock sync.Mutex
 
 func qprint(_ Evaller, ctx *Tail, x *VPair) bool {
+	(&p_lock).Lock()
 	for x != nil {
 		fmt.Printf("%v", x.Car)
 		x, _ = x.Cdr.(*VPair)
 	}
+	(&p_lock).Unlock()
 	ctx.Expr = VNil
 	return false
 }

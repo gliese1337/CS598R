@@ -1,60 +1,99 @@
 (def q (vau (a) % a))
-(def cons (wrap/rtl qcons))
-(def car (wrap/rtl qcar))
-(def cdr (wrap/rtl qcdr))
-(def list/rtl (wrap/rtl qlist))
-(def seq (wrap/rtl last))
+(def cons (wrap/snc qcons))
+(def cons/ltr (wrap/ltr qcons))
+(def car (wrap/ltr qcar))
+(def cdr (wrap/ltr qcdr))
+(def list (wrap/snc qlist))
+(def list/ltr (wrap/ltr qlist))
+(def seq (wrap/ltr last))
+(def par (wrap/snc last))
 (def qns (vau (e b) % (e b)))
-(def ns (wrap/rtl qns))
+(def ns (wrap/ltr qns))
 (def cur-env (vau () % %))
 (def new-env (vau () % (cur-env)))
-(def read (wrap/rtl qread))
-(def eq? (wrap/rtl qeq?))
+(def read (wrap/ltr qread))
+(def eq? (wrap/snc qeq?))
+(def eq?/ltr (wrap/ltr qeq?))
 (def qnil? (vau (a) % (eq? a ())))
-(def nil? (wrap/rtl qnil?))
-(def & (wrap/rtl qand))
-(def | (wrap/rtl qor))
+(def nil? (wrap/ltr qnil?))
+(def & (vau a % ((nil? a) #t ((% (car a)) (% (cons & (cdr a)) #f)))))
+(def | (vau a % ((nil? a) #f ((% (car a)) #t (% (cons | (cdr a)))))))
 (def qxor (vau (a b) % (a (b #f #t) (b #t #f))))
-(def ^ (wrap/rtl qxor))
+(def ^ (wrap/snc qxor))
 (def call/cc (vau (fn) % (bind/cc k (fn k))))
-(def * (wrap/rtl '*))
-(def / (wrap/rtl '/))
-(def + (wrap/rtl '+))
-(def - (wrap/rtl '-))
-(def < (wrap/rtl '<))
-(def <= (wrap/rtl '<=))
-(def > (wrap/rtl '>))
-(def >= (wrap/rtl '>=))
-(def sym? (wrap/rtl qsym?))
-(def str? (wrap/rtl qstr?))
-(def bool? (wrap/rtl qbool?))
-(def num? (wrap/rtl qnum?))
-(def pair? (wrap/rtl qpair?))
+(def * (wrap/snc '*))
+(def */ltr (wrap/ltr '*))
+(def / (wrap/snc '/))
+(def //ltr (wrap/ltr '/))
+(def + (wrap/snc '+))
+(def +/ltr (wrap/ltr '+))
+(def - (wrap/snc '-))
+(def -/ltr (wrap/ltr '-))
+(def < (wrap/ltr '<))
+(def < (wrap/ltr '<))
+(def <= (wrap/ltr '<=))
+(def <= (wrap/ltr '<=))
+(def > (wrap/ltr '>))
+(def > (wrap/ltr '>))
+(def >= (wrap/ltr '>=))
+(def >= (wrap/ltr '>=))
+(def sym? (wrap/ltr qsym?))
+(def str? (wrap/ltr qstr?))
+(def bool? (wrap/ltr qbool?))
+(def num? (wrap/ltr qnum?))
+(def pair? (wrap/ltr qpair?))
 (def qnot (vau (a) % (a #f #t)))
-(def not (wrap/rtl qnot))
-(def fn/rtl
-	(vau (args sym body) %
-		(wrap/rtl (% (list/rtl vau args sym body)))))
-(def unwrap (wrap/rtl qunwrap))
+(def not (wrap/ltr qnot))
+(def fn/snc
+	(vau (args body) %
+		(wrap/snc (% (list/ltr vau args ## body)))))
+(def fn/ltr
+	(vau (args body) %
+		(wrap/ltr (% (list/ltr vau args ## body)))))
+(def unwrap (wrap/ltr qunwrap))
 (def '@ (vau (p args) %
+	(% (cons p args))))
+(def @ (wrap/ltr '@))
+(def qcall (vau (p . args) %
 	(% (cons (unwrap p) args))))
-(def @/rtl (wrap/rtl '@))
-(def qcall (vau (p . args) % (seq
-	(% (cons p args)))))
-(def call/rtl (wrap/rtl qcall))
+(def call (wrap/snc qcall))
+(def call/ltr (wrap/ltr qcall))
 
-(def print (wrap/rtl qprint))
-(def println (fn/rtl a % (seq (@/rtl print a) (print "
+(def rec (fn/ltr (f) (vau a % (% (cons f (cons f a))))))
+(def rec/vau (vau (args e body) % (seq
+	(def f (% (list/ltr vau (cons (q self) args) e body)))
+	(vau args v (v f (cons f args))))))
+(def rec/snc (vau (args body) % (seq
+	(def f (wrap/snc (% (list/ltr vau (cons (q self) args) e body))))
+	(vau args e (e f (cons f args))))))
+(def rec/ltr (vau (args body) % (seq
+	(def f (wrap/ltr (% (list/ltr vau (cons (q self) args) e body))))
+	(vau args e (e f (cons f args))))))
+
+(def map (rec (fn/ltr (self f l) ((nil? l) l (cons (f (car l)) (self f (cdr l))))))
+(def map/snc (fn/ltr (f l) (@ list (map (vau (e) % (list f (% e))) l))))
+(def for/snc (vau (i range body) %
+	(map/snc (call/ltr vau (list i) ## body) (% range))))
+
+(def unique (wrap/ltr qunique))
+(def macro (vau (args body) %
+	(seq 	(def e (unique body))
+		(call/ltr vau args e (list % (list e body))))))
+
+(def let (vau (bindings body) ##
+	(@	(wrap/snc (call/ltr vau (map car bindings) ## body))
+		(map cdr bindings))))
+
+(def print (wrap/snc qprint))
+(def println (fn/snc a % (seq (@ print a) (qprint "
 "))))
 
 (def check (vau (a b name) % (seq
 	(def va (% a))
 	(def vb (% b))
 	((eq? va vb)
-		(print "Passed " name "
-")
-		(print "Failed " name ": " a " = " va ", not " vb "
-")))))
+		(println "Passed " name)
+		(println "Failed " name ": " a " = " va ", " b " = " vb)))))
 (def cond (vau opts eval
 	((nil? opts) ()
 		(seq
