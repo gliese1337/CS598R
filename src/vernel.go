@@ -72,7 +72,7 @@ func main() {
 	env := lib.GetBuiltins()
 	reschan := make(chan interface{})
 	for expr := range parser.Parse(inchan) {
-		fmt.Printf("%s ->\n", expr)
+		//fmt.Printf("%s ->\n", expr)
 		go eval.Eval(expr, env, &types.Continuation{
 			"Top",
 			func(ctx *types.Tail, vals *types.VPair) bool {
@@ -81,6 +81,7 @@ func main() {
 				return false
 			},
 		})
-		fmt.Printf("\t%s\n", <-reschan)
+		<-reschan
+		//fmt.Printf("\t%s\n", <-reschan)
 	}
 }

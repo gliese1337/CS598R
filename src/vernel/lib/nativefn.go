@@ -30,10 +30,16 @@ func timer(eval Evaller, ctx *Tail, x *VPair) bool {
 		panic("Invalid timer expression.")
 	}
 	start := time.Now()
-	val := eval(expr.Car, ctx.Env, Top)
-	fmt.Printf("%s ran in %v.\n", label, time.Since(start))
-	ctx.Expr = val
-	return false
+	//TODO: Auto-sequence
+	sk := ctx.K
+	ctx.Expr = expr.Car
+	ctx.K = &Continuation{"TimerK", func(nctx *Tail, vals *VPair) bool {
+		fmt.Printf("%s ran in %v.\n", label, time.Since(start))
+		nctx.Expr = vals.Car
+		nctx.K = sk
+		return false
+	}}
+	return true
 }
 
 func qand(_ Evaller, ctx *Tail, x *VPair) bool {
@@ -41,7 +47,7 @@ func qand(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No arguments to qand")
 	}
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qand")
@@ -63,7 +69,7 @@ func qor(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No arguments to qor")
 	}
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VBool)
 		if !ok {
 			panic("Non-boolean argument to qor")
@@ -96,7 +102,7 @@ func qeq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var cdr *VPair
 	var ok bool
-	for ;; x = cdr {
+	for ; ; x = cdr {
 		cdr, ok = x.Cdr.(*VPair)
 		if ok {
 			if cdr == nil {
@@ -121,7 +127,7 @@ func qmul(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var ret float64 = 1
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair){
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qmul")
@@ -145,7 +151,7 @@ func qdiv(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qdiv")
@@ -165,7 +171,7 @@ func qadd(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	var ret float64 = 0
 	var ok bool
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qadd")
@@ -189,7 +195,7 @@ func qsub(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	ret := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qsub")
@@ -213,7 +219,7 @@ func qless(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qless")
@@ -239,7 +245,7 @@ func qlesseq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -265,7 +271,7 @@ func qgreater(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -291,7 +297,7 @@ func qgreatereq(_ Evaller, ctx *Tail, x *VPair) bool {
 	}
 	last := float64(first)
 	x, ok = x.Cdr.(*VPair)
-	for ; x != nil ; x, ok = x.Cdr.(*VPair) {
+	for ; x != nil; x, ok = x.Cdr.(*VPair) {
 		b, ok := x.Car.(VNum)
 		if !ok {
 			panic("Non-numeric argument to qlesseq")
@@ -329,6 +335,16 @@ func qisstr(_ Evaller, ctx *Tail, x *VPair) bool {
 }
 func qissym(_ Evaller, ctx *Tail, x *VPair) bool {
 	_, ok := x.Car.(VSym)
+	ctx.Expr = VBool(ok)
+	return false
+}
+func qisproc(_ Evaller, ctx *Tail, x *VPair) bool {
+	_, ok := x.Car.(Callable)
+	ctx.Expr = VBool(ok)
+	return false
+}
+func qisapp(_ Evaller, ctx *Tail, x *VPair) bool {
+	_, ok := x.Car.(*Applicative)
 	ctx.Expr = VBool(ok)
 	return false
 }
@@ -380,7 +396,7 @@ func load_env(eval Evaller, env *Environment, fname string) {
 		close(inchan)
 	}()
 	for expr := range parser.Parse(inchan) {
-		eval(expr, env, Top)
+		eval(&Tail{expr, env, nil}, true)
 	}
 }
 
@@ -449,7 +465,7 @@ func bindcc(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("No body provided to bind/cc")
 	}
 	sk, senv := ctx.K, ctx.Env
-	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]interface{}{
+	ctx.Expr, ctx.Env = body.Car, NewEnv(ctx.Env, map[VSym]VValue{
 		k_sym: &Applicative{func(_ Callable, _ Evaller, nctx *Tail, args *VPair) bool {
 			if args == nil {
 				return sk.Fn(nctx, VNil)
@@ -537,7 +553,7 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 	if !ok {
 		panic("Non-list argument to def")
 	}
-	var val interface{}
+	var val VValue
 	if rest == nil {
 		val = VNil
 	} else {

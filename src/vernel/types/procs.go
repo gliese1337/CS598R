@@ -36,8 +36,8 @@ func (nfn *NativeFn) String() string {
 	return fmt.Sprintf("<native:%s>", nfn.Name)
 }
 
-func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
-	m := make(map[VSym]interface{})
+func match_args(fs VValue, a *VPair) map[VSym]VValue {
+	m := make(map[VSym]VValue)
 	switch f := fs.(type) {
 	case *VPair:
 		for f != nil {
@@ -48,7 +48,9 @@ func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 			if !ok {
 				panic("Cannot bind to non-symbol")
 			}
-			m[s] = a.Car
+			if string(s) != "##" {
+				m[s] = a.Car
+			}
 
 			ap, ok := a.Cdr.(*VPair)
 			switch fp := f.Cdr.(type) {
@@ -56,13 +58,17 @@ func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 				f, a = fp, ap
 			case VSym:
 				if ok {
-					m[fp] = ap
+					if string(fp) != "##" {
+						m[fp] = ap
+					}
 					f = nil
 				}
 			}
 		}
 	case VSym:
-		m[f] = a
+		if string(f) != "##" {
+			m[f] = a
+		}
 	default:
 		panic("Invalid formals!")
 	}
@@ -71,16 +77,42 @@ func match_args(fs interface{}, a *VPair) map[VSym]interface{} {
 
 type Combiner struct {
 	Cenv    *Environment
-	Formals interface{}
+	Formals VValue
 	Dsym    VSym
-	Body    interface{}
+	Body    *VPair
 }
 
 func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	arg_map := match_args(c.Formals, args)
-	arg_map[c.Dsym] = WrapEnv(ctx.Env)
-	ctx.Expr, ctx.Env = c.Body, NewEnv(c.Cenv, arg_map)
-	return true
+	if c.Body == nil {
+		ctx.Expr = VNil
+		return false
+	}
+	if string(c.Dsym) != "##" {
+		arg_map[c.Dsym] = WrapEnv(ctx.Env)
+	}
+	senv, sk := NewEnv(c.Cenv, arg_map), ctx.K
+	var eloop func(*Tail, *VPair) bool
+	eloop = func(kctx *Tail, body *VPair) bool {
+		var cfunc func(*Tail, *VPair) bool
+		next_expr, ok := body.Cdr.(*VPair)
+		if !ok {
+			panic("Invalid Function Body")
+		}
+		if next_expr == nil {
+			cfunc = func(nctx *Tail, va *VPair) bool {
+				nctx.Expr, nctx.K = va.Car, sk
+				return false
+			}
+		} else {
+			cfunc = func(nctx *Tail, va *VPair) bool {
+				return eloop(nctx, next_expr)
+			}
+		}
+		kctx.Expr, kctx.Env, kctx.K = body.Car, senv, &Continuation{"seq", cfunc}
+		return true
+	}
+	return eloop(ctx, c.Body)
 }
 
 func (c *Combiner) String() string {

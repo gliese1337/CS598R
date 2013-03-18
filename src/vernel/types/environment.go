@@ -7,7 +7,7 @@ import (
 
 type Environment struct {
 	parent *Environment
-	values map[VSym]interface{}
+	values map[VSym]VValue
 }
 
 func (e *Environment) String() string {
@@ -31,7 +31,7 @@ func (e *Environment) String() string {
 	return buf.String()
 }
 
-func (env *Environment) Get(x VSym) interface{} {
+func (env *Environment) Get(x VSym) VValue {
 loop:
 	if val, ok := env.values[x]; ok {
 		return val
@@ -43,7 +43,7 @@ loop:
 	panic("Unbound Symbol: " + string(x))
 }
 
-func (env *Environment) Set(x VSym, y interface{}) interface{} {
+func (env *Environment) Set(x VSym, y VValue) VValue {
 	env.values[x] = y
 	return y
 }
@@ -56,7 +56,7 @@ func (env *Environment) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	return true
 }
 
-func NewEnv(p *Environment, v map[VSym]interface{}) *Environment {
+func NewEnv(p *Environment, v map[VSym]VValue) *Environment {
 	return &Environment{parent: p, values: v}
 }
 

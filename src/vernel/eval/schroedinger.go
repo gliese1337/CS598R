@@ -44,6 +44,6 @@ func eval_loop(state *Tail, evaluate bool) {
 	}
 }
 
-func Eval(x VValue, env *Environment, k *Continuation)) {
+func Eval(x VValue, env *Environment, k *Continuation) {
 	eval_loop(&Tail{x, env, k}, true)
 }

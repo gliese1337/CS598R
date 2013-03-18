@@ -21,14 +21,14 @@ func vau(_ Evaller, ctx *Tail, x *VPair) bool {
 		panic("Missing Dynamic Environment Binding")
 	}
 	rest, ok := sym_rest.Cdr.(*VPair)
-	if rest == nil || !ok {
-		panic("Missing Vau Expression Body")
+	if !ok {
+		panic("Invalid Vau Expression Body")
 	}
 	ctx.Expr = &Combiner{
 		Cenv:    ctx.Env,
 		Formals: x.Car,
 		Dsym:    dsym,
-		Body:    rest.Car,
+		Body:    rest,
 	}
 	return false
 }
@@ -255,13 +255,15 @@ func basicWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool 
 
 	//randomize evaluation order
 	//TODO: Somehow calculate optimal evaluation orders....
-	var argset map[int]VValue
-	arglist[count-1].Cdr = VNil
-	for i := 0; i < count; i++ {
+	argset := make(map[int]VValue)
+	for i := 0; i < count-1; i++ {
 		arglist[i].Cdr = &(arglist[i+1])
 		argset[i] = args.Car
 		args = args.Cdr.(*VPair)
 	}
+	arglist[count-1].Cdr = VNil
+	argset[count-1] = args.Car
+
 	for i, a := range argset {
 		switch at := a.(type) {
 		case *VPair:
@@ -303,13 +305,13 @@ func wrap_gen(fn func(Callable, Evaller, *Tail, *VPair) bool) Callable {
 		ctx.K = &Continuation{
 			"wrap",
 			func(nctx *Tail, v *VPair) bool {
-				evaluate := qwrapf(nil,&sctx,v)
+				evaluate := qwrapf(nil, &sctx, v)
 				*nctx = sctx
 				return evaluate
 			},
 		}
 		return true
-	},&NativeFn{"wrapper",qwrapf}}
+	}, &NativeFn{"wrapper", qwrapf}}
 }
 
 func qunwrap(eval Evaller, ctx *Tail, x *VPair) bool {
@@ -318,7 +320,10 @@ func qunwrap(eval Evaller, ctx *Tail, x *VPair) bool {
 	}
 	if arg, ok := x.Car.(*Applicative); ok {
 		ctx.Expr = arg.Internal
-		return false
+	} else if arg, ok := x.Car.(Callable); ok {
+		ctx.Expr = arg
+	} else {
+		panic("Can't unwrap non-callable")
 	}
-	panic("Can't unwrap non-applicative")
+	return false
 }
