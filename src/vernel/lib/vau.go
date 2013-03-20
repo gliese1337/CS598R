@@ -205,50 +205,16 @@ func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool
 	}
 
 	sctx := *ctx
-	blocked := make(map[*Tail]struct{})
 	arglist := make([]VPair, count, count)
-	done := false
-	d_lock := new(sync.RWMutex)
+	futureset := make(map[*Future]struct{})
 
-	make_reactivation := func(idx int) func(*Tail, *VPair) bool {
-		reassign := func(nctx *Tail, vals *VPair) bool {
+	make_reactivation := func(idx int) *Continuation {
+		return &Continuation{"ArgK", func(nctx *Tail, vals *VPair) bool {
 			*nctx = sctx
 			nargs, slot := copy_arglist(idx, &(arglist[0]))
 			slot.Car = vals.Car
 			return internal.Call(eval, nctx, nargs)
-		}
-		return func(nctx *Tail, vals *VPair) bool {
-			d_lock.RLock()
-			if done {
-				d_lock.RUnlock()
-				return reassign(nctx, vals)
-			}
-			d_lock.RUnlock()
-			blocked[&Tail{vals.Car, sctx.Env, &Continuation{"ArgK", reassign}}] = struct{}{}
-			nctx.K = nil
-			return false
-		}
-	}
-
-	make_argk := func(idx int, f *Future) *Continuation {
-		var k Continuation
-		var k_lock sync.Mutex
-		var reactivate func(*Tail, *VPair) bool
-		k.Name = "ArgK"
-		k.Fn = func(nctx *Tail, vals *VPair) bool {
-			k_lock.Lock()
-			if reactivate != nil {
-				k_lock.Unlock()
-				return reactivate(nctx, vals)
-			}
-			f.Fulfill(eval, vals.Car)
-			reactivate = make_reactivation(idx)
-			k_lock.Unlock()
-			k.Fn = reactivate
-			nctx.K = nil
-			return false
-		}
-		return &k
+		}}
 	}
 
 	arglist[count-1].Cdr = VNil
@@ -258,9 +224,9 @@ func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool
 	for i := 0; i < count; i++ {
 		switch a := args.Car.(type) {
 		case *VPair:
-			f := new(Future)
+			f := MakeFuture(a, ctx.Env, make_reactivation(i))
+			futureset[f] = struct{}{}
 			arglist[i].Car = f
-			go eval(&Tail{a, ctx.Env, make_argk(i, f)}, true)
 		case VSym:
 			arglist[i].Car = ctx.Env.Get(a)
 		default:
@@ -268,12 +234,8 @@ func futureWrapper(internal Callable, eval Evaller, ctx *Tail, args *VPair) bool
 		}
 		args = args.Cdr.(*VPair)
 	}
-	d_lock.Lock()
-	done = true
-	d_lock.Unlock()
-	for context, _ := range blocked {
-		delete(blocked, context)
-		go eval(context, false)
+	for f, _ := range futureset {
+		f.Run(eval)
 	}
 	return internal.Call(eval, &sctx, &(arglist[0]))
 }

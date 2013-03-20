@@ -370,24 +370,9 @@ func vdefer(_ Evaller, ctx *Tail, x *VPair) bool {
 }
 
 func spawn(eval Evaller, ctx *Tail, x *VPair) bool {
-	var k_lock sync.Mutex
-	activated := false
-	senv, sk := ctx.Env, ctx.K
-	f := new(Future)
+	f := MakeFuture(x.Car, ctx.Env, ctx.K)
+	f.Run(eval)
 	ctx.Expr = f
-	go eval(&Tail{x.Car, ctx.Env, &Continuation{"FutureK", func(nctx *Tail, vals *VPair) bool {
-		k_lock.Lock()
-		if activated {
-			k_lock.Unlock()
-			nctx.Expr, nctx.Env, nctx.K = vals.Car, senv, sk
-			return false
-		}
-		activated = true
-		k_lock.Unlock()
-		f.Fulfill(eval, vals.Car)
-		nctx.K = nil
-		return false
-	}}}, true)
 	return false
 }
 
