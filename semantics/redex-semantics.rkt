@@ -2,9 +2,10 @@
 (require redex)
 
 (define-language vernel
+  [Binding (X Value) (X (thunk Env Expr))]
+  [HBinding Binding (X Prog) (X Pointer)]
   [Env (env (X Value) ...)]
-  [Binding (X any)]
-  [Heap (heap Binding ...)]
+  [Heap (heap HBinding ...)]
   [Wraptype wrap
             wrap-lazy
             wrap-future
@@ -39,13 +40,14 @@
           (vau (X ...) Y Expr)
           (Wraptype BValue)]
   [FValue Atomic (l FValue ...)]
-  [Node Wraptype Callwrap call call-fn thunk unwrap thunk l heap env strict]
-  [A hole (Heap CC)] ;answer evaluation
-  [C (Heap CC) CC]
+  [NBNode Wraptype Callwrap call call-fn thunk unwrap thunk l strict]
+  [Node NBNode heap env]
+  [C (Heap CC) CC] ;answer evaluation
   [CC hole
       (Env C) ;basic evaluation
-      ((heap Binding_1 ... (X C) Binding_2 ...) any) ;parallel evaluation
+      ((heap HBinding_1 ... (X C) HBinding_2 ...) any) ;parallel deferred evaluation
       (call-fn C any ...) ;fn evaluation
+      (strict C) ;repeated substitution
       ;ordered argument evaluation
       (call-wrap Callable any ... C any ...)
       (call-r6rs Callable any ... C any ...)
@@ -56,45 +58,53 @@
 (define reduce
   (reduction-relation
    vernel
-   (--> (in-hole C ((heap Binding_1 ...) ((heap Binding_2 ...) any)))
-        (in-hole C ((heap Binding_1 ... Binding_2 ...) any))
+   (--> (in-hole C ((heap HBinding_1 ...) ((heap HBinding_2 ...) any)))
+        (in-hole C ((heap HBinding_1 ... HBinding_2 ...) any))
         "merge")
+   (--> (in-hole C ((heap HBinding_1 ... (X ((heap HBinding_3 ...) any_1)) HBinding_2 ...) any_2))
+        (in-hole C ((heap HBinding_1 ... (X any_1) HBinding_2 ... HBinding_3 ...) any_2))
+        "extract")
    (--> (in-hole C_1 (Env (in-hole C_2 (Heap any))))
         (in-hole C_1 (Heap (Env (in-hole C_2 any))))
         (side-condition (term (contains-no-bind C_2)))
         "lift")
    ;garbage collection
    (--> (in-hole C (Heap FValue))
-        (in-hole C FValue))
+        (in-hole C FValue)
+        "answer")
    (--> (in-hole C (Heap BValue))
         (in-hole C ((trim-heap Heap BValue) BValue))
         (side-condition (term (contains-unused Heap BValue)))
         "GC")
    ;eval cases
    (--> (in-hole C (Env Idem))
-        (in-hole C Idem))
+        (in-hole C Idem)
+        "ident")
    (--> (in-hole C (Env X))
-        (in-hole C (lookup Env X)))
+        (in-hole C (lookup Env X))
+        "varref")
    (--> (in-hole C (Env (l Value ...)))
-        (in-hole C (Env (call Value ...))))
+        (in-hole C (Env (call Value ...)))
+        "apply")
    (--> (in-hole C (Env Pointer))
-        (in-hole C (defer Env (strict Pointer))))
+        (in-hole C (defer Env (strict Pointer)))
+        "propagate")
    ;strict eval cases
    (--> (in-hole C (Env (strict Idem)))
-        (in-hole C (Env Idem)))
+        (in-hole C (Env Idem))
+        "s ident")
    (--> (in-hole C (Env (strict X)))
-        (in-hole C (lookup Env X)))
+        (in-hole C (lookup Env X))
+        "s varref")
    (--> (in-hole C (Env (strict (l Value ...))))
-        (in-hole C (Env (call Value ...))))
-   (--> (in-hole C_1 ((heap Binding_1 ... (X (thunk Env_1 Expr)) Binding_2 ...) (in-hole C_2 (Env_2 (strict (p X))))))
-        (in-hole C_1 ((heap Binding_1 ... (X (Env_1 Expr)) Binding_2 ...) (in-hole C_2 (p X))))
+        (in-hole C (Env (call Value ...)))
+        "s apply")
+   (--> (in-hole C_1 ((heap HBinding_1 ... (X (thunk Env_1 Expr)) HBinding_2 ...) (in-hole C_2 (Env_2 (strict (p X))))))
+        (in-hole C_1 ((heap HBinding_1 ... (X (Env_1 Expr)) HBinding_2 ...) (in-hole C_2 (p X))))
         "strict")
    ;substitution
-   #;(--> (in-hole C_1 ((heap Binding_1 ... (X (in-hole A BValue)) Binding_2 ...) (in-hole C_2 (p X))))
-        (in-hole C_1 ((subst X BValue (heap Binding_1 ... (X (in-hole A BValue)) Binding_2 ...)) (subst X BValue (in-hole C_2 (p X)))))
-        "bound subst")
-   (--> (in-hole C_1 ((heap Binding_1 ... (X (in-hole A Value)) Binding_2 ...) (in-hole C_2 (p X))))
-        (in-hole C_1 ((subst X FValue (heap Binding_1 ... Binding_2 ...)) (subst X Value (in-hole C_2 (p X)))))
+   (--> (in-hole C_1 ((heap HBinding_1 ... (X Value) HBinding_2 ...) (in-hole C_2 (p X))))
+        (in-hole C_1 ((subst X Value (heap HBinding_1 ... HBinding_2 ...)) (subst X Value (in-hole C_2 (p X)))))
         "subst")
    ;application rules
    (--> (in-hole C (Env (call Evable Expr ...)))
@@ -102,7 +112,7 @@
         "fn lookup")
    (--> (in-hole C (Env (call-fn Callable Expr ...)))
         (in-hole C (Env (call Callable Expr ...)))
-        "apply")
+        "fn reduce")
    (--> (in-hole C (Env (call (Wraptype Expr_1) Expr_2 ...)))
         (in-hole C (Env (get-call-type Wraptype Env Expr_1 (Expr_2 ...))))
         "arg eval") ;Argument Evaluation & wrap reduction occur in two steps so that ordering rules can take effect
@@ -111,7 +121,7 @@
         "choose")
    (--> (in-hole C (Env (Callwrap Expr Value ...)))
         (in-hole C (Env (call Expr Value ...)))
-        "dewrap")
+        "wrap reduce")
    (--> (in-hole C (Env (call (vau (X ..._1) Y Expr_1) Expr_2 ..._1)))
         (in-hole C ((make-env Env (Y (wrap Env)) (X (value Expr_2)) ...) Expr_1))
         "call")
@@ -122,7 +132,8 @@
         (in-hole C (delta Env Op Expr ...))
         "delta")
    (--> (in-hole C (call Env Expr))
-        (in-hole C (Env Expr)))))
+        (in-hole C (Env Expr))
+        "eval")))
 
 (define-metafunction vernel
   value : Expr -> Value
@@ -134,19 +145,20 @@
 (define-metafunction vernel
   lookup : Env X -> Value
   [(lookup (env) X) ,(error "unbound variable")]
-  [(lookup (env Binding_1 ... (X Value) Binding_2 ...) X) Value])
+  [(lookup (env (X Value) Binding ...) X) Value]
+  [(lookup (env (Y Value) Binding ...) X) (lookup (env Binding ...) X)])
 
 (define-metafunction vernel
-  contains-no-bind : C -> any
-  [(contains-no-bind hole) #t]
-  [(contains-no-bind (Env C)) #f]
-  [(contains-no-bind (Heap CC)) #f]
-  [(contains-no-bind ((heap Binding_1 ... (X C) Binding_2 ...) any))
-   (contains-no-bind C)]
-  [(contains-no-bind (call-fn C any ...))
-   (contains-no-bind C)]
-  [(contains-no-bind (Callwrap Callable any ... C any ...))
-   (contains-no-bind C)])
+  [(contains-no-bind any) (contains-no-bind any #t)]
+  [(contains-no-bind ((heap any_1 ...) any_2)boolean) #f]
+  [(contains-no-bind (Env any) boolean) #f]
+  [(contains-no-bind hole boolean) boolean]
+  [(contains-no-bind FValue boolean) boolean]
+  [(contains-no-bind (NBNode) boolean) boolean]
+  [(contains-no-bind (NBNode any_1 any_2 ...) boolean)
+   (contains-no-bind any_1 (contains-no-bind (NBNode any_2 ...) boolean))]
+  [(contains-no-bind (vau (X ...) Y Expr) boolean)
+   (contains-no-bind Expr boolean)])
 
 (define-metafunction vernel
   subst : X Value any -> any
@@ -166,21 +178,21 @@
 
 (define-metafunction vernel
   [(build-heap call-lazy Env Expr_1
-               (heap Binding ...)
+               (heap HBinding ...)
                (args Pointer ...)
                Expr_2 Expr_3 ...)
    ,(let [(s (gensym))]
       (term (build-heap call-lazy Env Expr_1
-                        (heap Binding ... (,s (thunk Env Expr_2)))
+                        (heap HBinding ... (,s (thunk Env Expr_2)))
                         (args Pointer ... (p ,s))
                         Expr_3 ...)))]
   [(build-heap call-future Env Expr_1
-               (heap Binding ...)
+               (heap HBinding ...)
                (args Pointer ...)
                Expr_2 Expr_3 ...)
    ,(let [(s (gensym))]
       (term (build-heap call-future Env Expr_1
-                        (heap Binding ... (,s (Env Expr_2)))
+                        (heap HBinding ... (,s (Env Expr_2)))
                         (args Pointer ... (p ,s))
                         Expr_3 ...)))]
   [(build-heap Callwrap Env Expr_1 Heap (args Pointer ...))
@@ -205,7 +217,6 @@
 
 (define-metafunction vernel
   [(pointers-in FValue (X ...)) (X ...)]
-  [(pointers-in Node (X ...)) (X ...)]
   [(pointers-in (Node) (X ...)) (X ...)]
   [(pointers-in (Node any_1 any_2 ...) (X ...)) (pointers-in any_1 (pointers-in (Node any_2 ...) (X ...)))]
   [(pointers-in (Heap any) (X ...)) (pointers-in Heap (pointers-in any (X ...)))]
@@ -244,7 +255,7 @@
   [(delta Env > number_1 number_2) ,(> (term number_1) (term number_2))]
   [(delta Env = Value_1 Value_2) ,(eq? (term Value_1) (term Value_2))])
 
-#|
+
 ;test Env patterns
 (test-predicate list? (redex-match vernel
                                    Env (term (env))))
@@ -311,9 +322,9 @@
 
 ;test conditionals
 (test-->> reduce
-          (term (call #t 1 2)) 1)
+          (term ((env) (call #t 1 2))) 1)
 (test-->> reduce
-          (term (call #f 1 2)) 2)
+          (term ((env) (call #f 1 2))) 2)
 
 ;test function lookup
 (test-->> reduce
@@ -347,25 +358,112 @@
           (term ((env) (l (l vau (l n) y (l y n)) (l #t 1 2)))) 1)
 #;(traces reduce
           (term ((env) (l (l vau (l n) y (l y n)) (l #t 1 2)))))
-|#
-;test in-order evaluation
-#;(test-->> reduce
-            (term ((env) (l (l (l wrap wrap-ltr) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4)))) 3)
-#;(traces reduce
-          (term ((env) (l (l (l wrap wrap-rtl) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4)))))
-#;(traces reduce
-          (term ((env) (l (l (l wrap wrap) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4)))))
-#;(traces reduce
-          (term ((env) (l (l (l wrap wrap-r6rs) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4)))))
-#;(traces reduce
-          (term ((env) (l (l (l wrap wrap-future) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4)))))
-#;(traces reduce
-          (term ((env) (l (l (l wrap wrap) force) (l (l (l wrap wrap-lazy) (l vau (l n m) y m)) (l #t 1 2) (l #t 3 4))))))
-#;(traces reduce
-         (term ((env) (l (l (l wrap wrap) force) (l (l (l wrap wrap-lazy) (l vau (l m) y (l defer m))) (l #t 1 2))))))
 
-(traces reduce
-         (term ((env) (l (l (l wrap wrap) force) (l (l (l wrap wrap-lazy) (l vau (l m) y m)) (l defer (l #t 1 2)))))))
+;test in-order evaluation
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap-ltr)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4))))
+          3)
+#;(traces reduce
+          (term ((env) (l (l (l wrap wrap-ltr)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4)))))
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4))))
+          3)
+#;(traces reduce
+          (term ((env) (l (l (l wrap wrap)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4)))))
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap-r6rs)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4))))
+          3)
+#;(traces reduce
+          (term ((env) (l (l (l wrap wrap-r6rs)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4)))))
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap-future)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4))))
+          3)
+#;(traces reduce
+          (term ((env) (l (l (l wrap wrap-future)
+                             (l vau (l n m) y m))
+                          (l #t 1 2)
+                          (l #t 3 4)))))
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap) force)
+                          (l (l (l wrap wrap-lazy)
+                                (l vau (l n m) y m))
+                             (l #t 1 2)
+                             (l #t 3 4)))))
+          3)
+#;(traces reduce
+          (term ((env) (l (l (l wrap wrap) force)
+                          (l (l (l wrap wrap-lazy)
+                                (l vau (l n m) y m))
+                             (l #t 1 2)
+                             (l #t 3 4))))))
+
+(test-predicate list? (redex-match vernel
+                                   ((heap (X (thunk (env) (l #t 1 2)))) (p X))
+                                   (car (apply-reduction-relation*
+                                         reduce
+                                         (term ((env) (l (l (l wrap wrap) force)
+                                                         (l (l (l wrap wrap-lazy)
+                                                               (l vau (l m) y (l defer m)))
+                                                            (l #t 1 2)))))))))
+#;(traces reduce
+         (term ((env) (l (l (l wrap wrap) force)
+                         (l (l (l wrap wrap-lazy)
+                               (l vau (l m) y (l defer m)))
+                            (l #t 1 2))))))
+
+(test-->> reduce
+         (term ((env) (l (l (l wrap wrap) force)
+                         (l (l (l wrap wrap-lazy)
+                               (l vau (l n m) y
+                                  (l (l (l wrap wrap) force) m)))
+                            (l #t (l defer 1) 2)
+                            (l #t (l defer 3) 4)))))
+         3)
+
+#;(traces reduce
+         (term ((env) (l (l (l wrap wrap) force)
+                         (l (l (l wrap wrap-lazy)
+                               (l vau (l n m) y
+                                  (l (l (l wrap wrap) force) m)))
+                            (l #t (l defer 1) 2)
+                            (l #t (l defer 3) 4))))))
+(test-->> reduce
+         (term ((env) (l (l (l wrap wrap) force)
+                         (l (l (l wrap wrap) force)
+                            (l (l (l wrap wrap-lazy)
+                                  (l vau (l n m) y m))
+                               (l #t (l defer 1) 2)
+                               (l #t (l defer 3) 4))))))
+         3)
+
+#;(traces reduce
+         (term ((env) (l (l (l wrap wrap) force)
+                         (l (l (l wrap wrap) force)
+                            (l (l (l wrap wrap-lazy)
+                                  (l vau (l n m) y m))
+                               (l #t (l defer 1) 2)
+                               (l #t (l defer 3) 4)))))))
 
 
 ;test arithmetic
