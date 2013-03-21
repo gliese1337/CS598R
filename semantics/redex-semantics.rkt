@@ -91,7 +91,7 @@
         "propagate")
    ;strict eval cases
    (--> (in-hole C (Env (strict Idem)))
-        (in-hole C (Env Idem))
+        (in-hole C Idem)
         "s ident")
    (--> (in-hole C (Env (strict X)))
         (in-hole C (lookup Env X))
@@ -100,7 +100,7 @@
         (in-hole C (Env (call Value ...)))
         "s apply")
    (--> (in-hole C_1 ((heap HBinding_1 ... (X (thunk Env_1 Expr)) HBinding_2 ...) (in-hole C_2 (Env_2 (strict (p X))))))
-        (in-hole C_1 ((heap HBinding_1 ... (X (Env_1 Expr)) HBinding_2 ...) (in-hole C_2 (p X))))
+        (in-hole C_1 ((heap HBinding_1 ... (X (Env_1 Expr)) HBinding_2 ...) (in-hole C_2 (Env_2 (strict (p X))))))
         "strict")
    ;substitution
    (--> (in-hole C_1 ((heap HBinding_1 ... (X Value) HBinding_2 ...) (in-hole C_2 (p X))))
@@ -418,7 +418,7 @@
                              (l #t 1 2)
                              (l #t 3 4))))))
 
-(test-predicate list? (redex-match vernel
+#;(test-predicate list? (redex-match vernel
                                    ((heap (X (thunk (env) (l #t 1 2)))) (p X))
                                    (car (apply-reduction-relation*
                                          reduce
@@ -426,6 +426,13 @@
                                                          (l (l (l wrap wrap-lazy)
                                                                (l vau (l m) y (l defer m)))
                                                             (l #t 1 2)))))))))
+(test-->> reduce
+          (term ((env) (l (l (l wrap wrap) force)
+                          (l (l (l wrap wrap-lazy)
+                                (l vau (l m) y (l defer m)))
+                             (l #t 1 2)))))
+          1)
+
 #;(traces reduce
          (term ((env) (l (l (l wrap wrap) force)
                          (l (l (l wrap wrap-lazy)
