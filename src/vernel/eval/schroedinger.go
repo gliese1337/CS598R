@@ -1,5 +1,6 @@
 package eval
 
+import "fmt"
 import . "vernel/types"
 
 func strict_args(proc Callable, ctx *Tail, args VValue) bool {
@@ -24,7 +25,7 @@ func strict_args(proc Callable, ctx *Tail, args VValue) bool {
 			}}
 			return d.Strict(eval_loop, ctx)
 		}
-		panic("Invalid Argument List")
+		panic(fmt.Sprintf("Invalid Argument List: %v", arglist.Cdr))
 	}
 	return argk(ctx, args)
 }
@@ -33,11 +34,7 @@ func proc_k(sctx Tail, args VValue) *Continuation {
 	var callk func(*Tail, *VPair) bool
 	callk = func(nctx *Tail, p *VPair) bool {
 		if d, ok := p.Car.(Deferred); ok {
-			senv, sk := nctx.Env, nctx.K
-			nctx.K = &Continuation{"StrictK", func(kctx *Tail, vals *VPair) bool {
-				kctx.Env, kctx.K = senv, sk
-				return callk(kctx, vals)
-			}}
+			nctx.K = &Continuation{"StrictK", callk}
 			return d.Strict(eval_loop, nctx)
 		}
 		if proc, ok := p.Car.(Callable); ok {
@@ -54,10 +51,9 @@ func eval_loop(state *Tail, evaluate bool) {
 		if !evaluate {
 			goto finish
 		}
-		//TODO: wrap in thunk to propagate laziness
 		if d, ok := state.Expr.(Deferred); ok {
-			evaluate = d.Strict(eval_loop, state)
-			continue
+			state.Expr = MakeEvalDefer(d, state.Env, state.K)
+			goto finish
 		}
 		switch xt := state.Expr.(type) {
 		case VSym:

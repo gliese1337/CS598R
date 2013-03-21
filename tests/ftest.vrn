@@ -42,13 +42,14 @@
 (def bool? (wrap/ltr qbool?))
 (def num? (wrap/ltr qnum?))
 (def pair? (wrap/ltr qpair?))
+(def lazy? (wrap/ltr qlazy?))
 (def qnot (vau (a) % (a #f #t)))
 (def strict (wrap/ltr qstrict))
 
 (def unwrap (wrap/ltr qunwrap))
 (def '@ (vau (p args) %
 	(% (cons (unwrap p) args))))
-(def @/ltr (wrap/ltr '@))
+(def @ (wrap/ltr '@))
 
 (def print (wrap qprint))
 
@@ -65,6 +66,8 @@
 (check (strict (spawn (+ 1 1))) 2 "spawn test")
 (check ((defer car) (cons 1 2)) 1 "callsite strictness 1")
 (check ((defer (defer car)) (cons 1 2)) 1 "callsite strictness 2")
-(check (@ + (defer (cons 1 2))) 3 "arg strcictness 1")
-(check (@ + (defer (cons 1 (defer (cons 2 3))))) 6 "arg strcictness 2")
-(check (@ + (cons 1 (defer (cons 2 3))) 6 "arg strcictness 3")
+(check (@ + (defer (cons 1 (cons 2 ())))) 3 "arg strictness 1")
+(check (@ + (defer (cons 1 (defer (cons 2 (cons 3 ())))))) 6 "arg strictness 2")
+(check (@ + (cons 1 (defer (cons 2 (cons 3 ()))))) 6 "arg strictness 3")
+(check (lazy? ((cur-env) (defer (+ 1 1)))) #t "lazy propagation test 1")
+(check (strict ((cur-env) (defer (+ 1 1)))) 2 "lazy propagation test 2")
