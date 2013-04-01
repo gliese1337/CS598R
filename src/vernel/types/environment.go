@@ -10,6 +10,17 @@ type Environment struct {
 	values map[VSym]VValue
 }
 
+func (e *Environment) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[e]; e == nil || ok {
+		return 0
+	}
+	total := e.parent.GetSize(seen)
+	for _, v := range e.values {
+		total += 1 + v.GetSize(seen)
+	}
+	return total
+}
+
 func (e *Environment) String() string {
 	if e == nil {
 		return "{}"
@@ -32,13 +43,11 @@ func (e *Environment) String() string {
 }
 
 func (env *Environment) Get(x VSym) VValue {
-loop:
-	if val, ok := env.values[x]; ok {
-		return val
-	}
-	if env.parent != nil {
+	for env != nil {
+		if val, ok := env.values[x]; ok {
+			return val
+		}
 		env = env.parent
-		goto loop
 	}
 	panic("Unbound Symbol: " + string(x))
 }
@@ -65,14 +74,16 @@ func WrapEnv(p *Environment) *Applicative {
 		if cargs == nil {
 			ctx.Expr = VNil
 		} else {
-			sctx := *ctx
+			sexpr, senv, sk := ctx.Expr, ctx.Env, ctx.K
 			ctx.Expr, ctx.K = cargs.Car, &Continuation{
 				"eval",
 				func(nctx *Tail, v *VPair) bool {
+					sctx := Tail{sexpr, senv, sk, nctx.Time}
 					evaluate := p.Call(nil, &sctx, v)
 					*nctx = sctx
 					return evaluate
 				},
+				[]VValue{p, sexpr, senv, sk},
 			}
 		}
 		return true

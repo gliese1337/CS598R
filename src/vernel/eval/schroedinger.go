@@ -2,6 +2,7 @@ package eval
 
 import "fmt"
 import . "vernel/types"
+import "vernel/prof"
 
 func strict_args(proc Callable, ctx *Tail, args VValue) bool {
 	var arglist VPair
@@ -22,7 +23,7 @@ func strict_args(proc Callable, ctx *Tail, args VValue) bool {
 		if d, ok := arg.(Deferred); ok {
 			ctx.K = &Continuation{"strict_args", func(nctx *Tail, vals *VPair) bool {
 				return argk(nctx, vals.Car)
-			}}
+			}, nil}
 			return d.Strict(eval_loop, ctx)
 		}
 		panic(fmt.Sprintf("Invalid Argument List: %v", arglist.Cdr))
@@ -32,22 +33,32 @@ func strict_args(proc Callable, ctx *Tail, args VValue) bool {
 
 func proc_k(sctx Tail, args VValue) *Continuation {
 	var callk func(*Tail, *VPair) bool
+	sexpr, senv, sk := sctx.Expr, sctx.Env, sctx.K
 	callk = func(nctx *Tail, p *VPair) bool {
 		if d, ok := p.Car.(Deferred); ok {
-			nctx.K = &Continuation{"StrictK", callk}
+			nctx.K = &Continuation{"StrictK", callk, []VValue{sexpr, senv, sk}}
 			return d.Strict(eval_loop, nctx)
 		}
 		if proc, ok := p.Car.(Callable); ok {
-			*nctx = sctx
+			nctx.Expr, nctx.Env, nctx.K = sexpr, senv, sk
 			return strict_args(proc, nctx, args)
 		}
 		panic("Non-callable in function position")
 	}
-	return &Continuation{"call", callk}
+	return &Continuation{"call", callk, []VValue{sexpr, senv, sk}}
 }
 
-func eval_loop(state *Tail, evaluate bool) {
+func eval_loop(state *Tail, starttime int, evaluate bool) {
+	if state.Time < starttime {
+		e := state.Expr
+		state.Expr = nil
+		for state.Time < starttime {
+			prof.Clock(state)
+		}
+		state.Expr = e
+	}
 	for state.K != nil {
+		prof.Clock(state)
 		if !evaluate {
 			goto finish
 		}
@@ -71,5 +82,6 @@ func eval_loop(state *Tail, evaluate bool) {
 }
 
 func Eval(x VValue, env *Environment, k *Continuation) {
-	eval_loop(&Tail{x, env, k}, true)
+	time := prof.GetTime()
+	eval_loop(&Tail{x, env, k, time}, time, true)
 }

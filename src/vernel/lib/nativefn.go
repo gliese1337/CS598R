@@ -1,45 +1,32 @@
 package lib
 
-import (
-	"bufio"
-	"fmt"
-	"os"
-	"sync"
-	"time"
-	"vernel/parser"
-	. "vernel/types"
-)
+import "fmt"
+import "sync"
+import . "vernel/types"
+import "vernel/prof"
+
+func startprof(_ Evaller, ctx *Tail, _ *VPair) bool {
+	prof.StartProfile()
+	ctx.Expr = nil
+	return false
+}
+
+func writeprof(_ Evaller, ctx *Tail, x *VPair) bool {
+	if x != nil {
+		if fname, ok := x.Car.(VStr); ok {
+			prof.WriteProfile(string(fname))
+			ctx.Expr = nil
+			return false
+		}
+	}
+	panic("No Profile File Provided")
+}
 
 func vpanic(_ Evaller, _ *Tail, x *VPair) bool {
 	if x == nil {
 		panic("Runtime Error")
 	}
 	panic(x.Car)
-}
-
-func timer(eval Evaller, ctx *Tail, x *VPair) bool {
-	if x == nil {
-		panic("No arguments to timer.")
-	}
-	label, ok := x.Car.(VStr)
-	if !ok {
-		panic("Invalid timer label.")
-	}
-	expr, ok := x.Cdr.(*VPair)
-	if !ok || expr == nil {
-		panic("Invalid timer expression.")
-	}
-	start := time.Now()
-	//TODO: Auto-sequence
-	sk := ctx.K
-	ctx.Expr = expr.Car
-	ctx.K = &Continuation{"TimerK", func(nctx *Tail, vals *VPair) bool {
-		fmt.Printf("%s ran in %v.\n", label, time.Since(start))
-		nctx.Expr = vals.Car
-		nctx.K = sk
-		return false
-	}}
-	return true
 }
 
 func qand(_ Evaller, ctx *Tail, x *VPair) bool {
@@ -371,7 +358,7 @@ func vdefer(_ Evaller, ctx *Tail, x *VPair) bool {
 
 func spawn(eval Evaller, ctx *Tail, x *VPair) bool {
 	f := MakeFuture(x.Car, ctx.Env, ctx.K)
-	f.Run(eval)
+	f.Run(eval, ctx.Time)
 	ctx.Expr = f
 	return false
 }
@@ -381,99 +368,6 @@ func qstrict(eval Evaller, ctx *Tail, x *VPair) bool {
 		return d.Strict(eval, ctx)
 	}
 	ctx.Expr = x.Car
-	return false
-}
-
-func qread(_ Evaller, ctx *Tail, x *VPair) bool {
-	if x == nil {
-		ctx.Expr = VNil
-		return false
-	}
-	inchan := make(chan rune)
-	go func() {
-		for x != nil {
-			vstr, ok := x.Car.(VStr)
-			if !ok {
-				panic("Non-string argument to read")
-			}
-			for _, r := range string(vstr) {
-				inchan <- r
-			}
-		}
-		close(inchan)
-	}()
-	var rootpair = VPair{nil, nil}
-	curpair := &rootpair
-	for expr := range parser.Parse(inchan) {
-		nextpair := &VPair{expr, VNil}
-		curpair.Cdr = nextpair
-		curpair = nextpair
-	}
-	ctx.Expr = rootpair.Cdr
-	return false
-}
-
-func load_env(eval Evaller, env *Environment, fname string) {
-	file, err := os.Open(fname)
-	if err != nil {
-		panic("Error opening file.")
-	}
-	defer file.Close()
-
-	inchan := make(chan rune)
-	go func() {
-		freader := bufio.NewReader(file)
-	loop:
-		if r, _, err := freader.ReadRune(); err == nil {
-			inchan <- r
-			goto loop
-		}
-		close(inchan)
-	}()
-	for expr := range parser.Parse(inchan) {
-		eval(&Tail{expr, env, nil}, true)
-	}
-}
-
-func use(eval Evaller, ctx *Tail, x *VPair) bool {
-	if x == nil {
-		panic("No arguments to use")
-	}
-	vstr, ok := x.Car.(VStr)
-	if !ok {
-		panic("Non-string argument to use")
-	}
-	body, ok := x.Cdr.(*VPair)
-	if !ok {
-		panic("Missing body expression in use")
-	}
-	env := GetBuiltins()
-	load_env(eval, env, string(vstr))
-	ctx.Expr, ctx.Env = body.Car, env
-	return true
-}
-
-func loader(eval Evaller, env *Environment, x *VPair, pstr string) {
-	for x != nil {
-		vstr, ok := x.Car.(VStr)
-		if !ok {
-			panic(pstr)
-		}
-		load_env(eval, env, string(vstr))
-		x, ok = x.Cdr.(*VPair)
-	}
-}
-
-func load(eval Evaller, ctx *Tail, x *VPair) bool {
-	env := GetBuiltins()
-	loader(eval, env, x, "Non-string argument to load")
-	ctx.Expr = WrapEnv(env)
-	return false
-}
-
-func qimport(eval Evaller, ctx *Tail, x *VPair) bool {
-	loader(eval, ctx.Env, x, "Non-string argument to import")
-	ctx.Expr = VNil
 	return false
 }
 
@@ -505,7 +399,7 @@ func bindcc(_ Evaller, ctx *Tail, x *VPair) bool {
 			if args == nil {
 				return sk.Fn(nctx, VNil)
 			}
-			*nctx = Tail{args.Car, senv, sk}
+			*nctx = Tail{args.Car, senv, sk, nctx.Time}
 			return true
 		}, sk},
 	})
@@ -599,9 +493,10 @@ func def(_ Evaller, ctx *Tail, x *VPair) bool {
 		"def",
 		func(nctx *Tail, args *VPair) bool {
 			senv.Set(sym, args.Car)
-			*nctx = Tail{args.Car, senv, sk}
+			*nctx = Tail{args.Car, senv, sk, nctx.Time}
 			return false
 		},
+		[]VValue{senv, sk, sym},
 	}
 	return true
 }

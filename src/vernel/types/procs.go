@@ -5,10 +5,23 @@ import "fmt"
 type Continuation struct {
 	Name string
 	Fn   func(*Tail, *VPair) bool
+	Refs []VValue
 }
 
 func (k *Continuation) Call(_ Evaller, ctx *Tail, x *VPair) bool {
 	return k.Fn(ctx, x)
+}
+
+func (k *Continuation) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[k]; k == nil || ok {
+		return 0
+	}
+	seen[k] = struct{}{}
+	total := 1
+	for _, v := range k.Refs {
+		total += v.GetSize(seen)
+	}
+	return total
 }
 
 func (k *Continuation) String() string {
@@ -21,6 +34,7 @@ var Top = &Continuation{
 		ctx.Expr, ctx.K = args.Car, nil
 		return false
 	},
+	nil,
 }
 
 type NativeFn struct {
@@ -30,6 +44,14 @@ type NativeFn struct {
 
 func (nfn *NativeFn) Call(eval Evaller, ctx *Tail, x *VPair) bool {
 	return nfn.Fn(eval, ctx, x)
+}
+
+func (nfn *NativeFn) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[nfn]; nfn == nil || ok {
+		return 0
+	}
+	seen[nfn] = struct{}{}
+	return 1
 }
 
 func (nfn *NativeFn) String() string {
@@ -94,25 +116,32 @@ func (c *Combiner) Call(_ Evaller, ctx *Tail, args *VPair) bool {
 	senv, sk := NewEnv(c.Cenv, arg_map), ctx.K
 	var eloop func(*Tail, *VPair) bool
 	eloop = func(kctx *Tail, body *VPair) bool {
-		var cfunc func(*Tail, *VPair) bool
 		next_expr, ok := body.Cdr.(*VPair)
 		if !ok {
 			panic("Invalid Function Body")
 		}
 		if next_expr == nil {
-			cfunc = func(nctx *Tail, va *VPair) bool {
+			kctx.K = &Continuation{"seq", func(nctx *Tail, va *VPair) bool {
 				nctx.Expr, nctx.K = va.Car, sk
 				return false
-			}
+			}, []VValue{sk}}
 		} else {
-			cfunc = func(nctx *Tail, va *VPair) bool {
+			kctx.K = &Continuation{"seq", func(nctx *Tail, va *VPair) bool {
 				return eloop(nctx, next_expr)
-			}
+			}, []VValue{next_expr}}
 		}
-		kctx.Expr, kctx.Env, kctx.K = body.Car, senv, &Continuation{"seq", cfunc}
+		kctx.Expr, kctx.Env = body.Car, senv
 		return true
 	}
 	return eloop(ctx, c.Body)
+}
+
+func (c *Combiner) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[c]; c == nil || ok {
+		return 0
+	}
+	seen[c] = struct{}{}
+	return 1 + c.Formals.GetSize(seen) + c.Body.GetSize(seen) + c.Cenv.GetSize(seen)
 }
 
 func (c *Combiner) String() string {
@@ -126,6 +155,14 @@ type Applicative struct {
 
 func (a *Applicative) Call(eval Evaller, ctx *Tail, args *VPair) bool {
 	return a.Wrapper(a.Internal, eval, ctx, args)
+}
+
+func (a *Applicative) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[a]; a == nil || ok {
+		return 0
+	}
+	seen[a] = struct{}{}
+	return 1 + a.Internal.GetSize(seen)
 }
 
 func (a *Applicative) String() string {

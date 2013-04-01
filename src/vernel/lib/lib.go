@@ -21,10 +21,6 @@ func GetBuiltins() *Environment {
 			VSym("qprint"):   &NativeFn{"qprint", qprint},
 			VSym("last"):     &NativeFn{"last", last},
 			VSym("qlist"):    &NativeFn{"qlist", qlist},
-			VSym("use"):      &NativeFn{"use", use},
-			VSym("load"):     &NativeFn{"load", load},
-			VSym("import"):   &NativeFn{"import", qimport},
-			VSym("qread"):    &NativeFn{"qread", qread},
 			VSym("qeq?"):     &NativeFn{"qeq", qeq},
 			VSym("qand"):     &NativeFn{"qand", qand},
 			VSym("qor"):      &NativeFn{"qor", qor},
@@ -49,9 +45,10 @@ func GetBuiltins() *Environment {
 			VSym("defer"):    &NativeFn{"defer", vdefer},
 			VSym("spawn"):    &NativeFn{"spawn", spawn},
 			VSym("qstrict"):  &NativeFn{"qstrict", qstrict},
-			VSym("timer"):    &NativeFn{"timer", timer},
 			VSym("panic"):    &NativeFn{"panic", vpanic},
 			VSym("abort"):    &NativeFn{"abort", abort},
 			VSym("qunique"):  &NativeFn{"qunique", unique},
+			VSym("sprof"):    &NativeFn{"sprof", startprof},
+			VSym("wprof"):    &NativeFn{"wprof", writeprof},
 		})
 }

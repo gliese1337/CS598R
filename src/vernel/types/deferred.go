@@ -23,7 +23,7 @@ func strict_block(eval Evaller, ctx *Tail) {
 			return d.Strict(eval, ctx)
 		}
 		return k.Fn(ctx, vals)
-	}}
+	}, []VValue{k}}
 }
 
 type Future struct {
@@ -40,7 +40,7 @@ func MakeFuture(expr VValue, env *Environment, k *Continuation) *Future {
 	return &Future{expr: expr, env: env, k: k, blocked: make(map[*Tail]struct{})}
 }
 
-func (f *Future) Run(eval Evaller) {
+func (f *Future) Run(eval Evaller, time int) {
 	k := &Continuation{"FTop", func(ctx *Tail, vals *VPair) bool {
 		v := vals.Car
 		f.lock.Lock()
@@ -52,15 +52,17 @@ func (f *Future) Run(eval Evaller) {
 		f.result = v
 		f.fulfilled = true
 		f.lock.Unlock()
+		ntime := ctx.Time
 		for context, _ := range f.blocked {
 			context.Expr = v
-			go eval(context, false)
+			go eval(context, ntime, false)
 		}
 		f.blocked = nil
 		ctx.K = nil
 		return false
-	}}
-	go eval(&Tail{f.expr, f.env, k}, true)
+	}, []VValue{f}}
+	go eval(&Tail{f.expr, f.env, k, time}, time, true)
+	f.expr = nil
 }
 
 func (f *Future) Strict(eval Evaller, ctx *Tail) bool {
@@ -73,16 +75,24 @@ func (f *Future) Strict(eval Evaller, ctx *Tail) bool {
 			ctx.K = &Continuation{"replace", func(nctx *Tail, vals *VPair) bool {
 				f.result = vals.Car
 				return sk.Fn(nctx, vals)
-			}}
+			}, []VValue{f, sk}}
 			return d.Strict(eval, ctx)
 		}
 		ctx.Expr = f.result
 		return false
 	}
 	f.lock.Unlock()
-	f.blocked[&Tail{nil, ctx.Env, ctx.K}] = struct{}{}
+	f.blocked[&Tail{nil, ctx.Env, ctx.K, ctx.Time}] = struct{}{}
 	ctx.K = nil
 	return false
+}
+
+func (f *Future) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[f]; f == nil || ok {
+		return 0
+	}
+	seen[f] = struct{}{}
+	return 1 + f.result.GetSize(seen) + f.expr.GetSize(seen) + f.env.GetSize(seen) + f.k.GetSize(seen)
 }
 
 func (f *Future) String() string {
@@ -117,14 +127,14 @@ func (t *Thunk) Strict(eval Evaller, ctx *Tail) bool {
 			ctx.K = &Continuation{"replace", func(nctx *Tail, vals *VPair) bool {
 				t.result = vals.Car
 				return sk.Fn(nctx, vals)
-			}}
+			}, []VValue{t, sk}}
 			return d.Strict(eval, ctx)
 		}
 		ctx.Expr = t.result
 		return false
 	}
 	if t.executing {
-		t.blocked[&Tail{nil, ctx.Env, ctx.K}] = struct{}{}
+		t.blocked[&Tail{nil, ctx.Env, ctx.K, ctx.Time}] = struct{}{}
 		ctx.K = nil
 		return false
 	}
@@ -143,15 +153,24 @@ func (t *Thunk) Strict(eval Evaller, ctx *Tail) bool {
 		t.fulfilled = true
 		t.result = v
 		t.lock.Unlock()
+		ntime := nctx.Time
 		for context, _ := range t.blocked {
 			context.Expr = v
-			go eval(context, false)
+			go eval(context, ntime, false)
 		}
 		t.blocked = nil
 		nctx.Expr, nctx.Env, nctx.K = v, senv, sk
 		return false
-	}}
+	}, []VValue{senv, sk, t}}
 	return true
+}
+
+func (t *Thunk) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[t]; t == nil || ok {
+		return 0
+	}
+	seen[t] = struct{}{}
+	return 1 + t.result.GetSize(seen) + t.expr.GetSize(seen) + t.env.GetSize(seen) + t.k.GetSize(seen)
 }
 
 func (t *Thunk) String() string {
@@ -186,14 +205,14 @@ func (e *EvalDefer) Strict(eval Evaller, ctx *Tail) bool {
 			ctx.K = &Continuation{"replace", func(nctx *Tail, vals *VPair) bool {
 				e.result = vals.Car
 				return sk.Fn(nctx, vals)
-			}}
+			}, []VValue{e, sk}}
 			return d.Strict(eval, ctx)
 		}
 		ctx.Expr = e.result
 		return false
 	}
 	if e.executing {
-		e.blocked[&Tail{nil, ctx.Env, ctx.K}] = struct{}{}
+		e.blocked[&Tail{nil, ctx.Env, ctx.K, ctx.Time}] = struct{}{}
 		ctx.K = nil
 		return false
 	}
@@ -209,6 +228,7 @@ func (e *EvalDefer) Strict(eval Evaller, ctx *Tail) bool {
 			nctx.Expr, nctx.Env, nctx.K = v, e.env, e.k
 			return false
 		}
+		e.d = nil
 		e.lock.Unlock()
 
 		//need to now evaluate the result of stricting
@@ -224,18 +244,27 @@ func (e *EvalDefer) Strict(eval Evaller, ctx *Tail) bool {
 			e.result = v
 			e.lock.Unlock()
 
+			ntime := kctx.Time
 			for context, _ := range e.blocked {
 				context.Expr = v
-				go eval(context, false)
+				go eval(context, ntime, false)
 			}
 			e.blocked = nil
 			kctx.Expr, kctx.Env, kctx.K = v, senv, sk
 			return false
-		}}
+		}, []VValue{e, senv, sk}}
 		nctx.Expr, nctx.Env = v, e.env
 		return true
-	}}
+	}, []VValue{e, senv, sk}}
 	return e.d.Strict(eval, ctx)
+}
+
+func (e *EvalDefer) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[e]; e == nil || ok {
+		return 0
+	}
+	seen[e] = struct{}{}
+	return 1 + e.result.GetSize(seen) + e.d.GetSize(seen) + e.env.GetSize(seen) + e.k.GetSize(seen)
 }
 
 func (e *EvalDefer) String() string {

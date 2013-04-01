@@ -8,15 +8,17 @@ import (
 
 type VValue interface {
 	String() string
+	GetSize(map[VValue]struct{}) int
 }
 
 type Tail struct {
 	Expr VValue
 	Env  *Environment
 	K    *Continuation
+	Time int
 }
 
-type Evaller func(*Tail, bool)
+type Evaller func(*Tail, int, bool)
 
 type Callable interface {
 	VValue
@@ -25,24 +27,36 @@ type Callable interface {
 
 type VSym string
 
+func (v VSym) GetSize(seen map[VValue]struct{}) int {
+	return 1
+}
 func (v VSym) String() string {
 	return string(v)
 }
 
 type VStr string
 
+func (v VStr) GetSize(seen map[VValue]struct{}) int {
+	return 1
+}
 func (v VStr) String() string {
 	return string(v)
 }
 
 type VNum float64
 
+func (v VNum) GetSize(seen map[VValue]struct{}) int {
+	return 1
+}
 func (v VNum) String() string {
 	return strconv.FormatFloat(float64(v), 'g', -1, 64)
 }
 
 type VBool bool
 
+func (v VBool) GetSize(seen map[VValue]struct{}) int {
+	return 1
+}
 func (v VBool) String() string {
 	if v {
 		return "#t"
@@ -72,6 +86,13 @@ type VPair struct {
 	Cdr VValue
 }
 
+func (v *VPair) GetSize(seen map[VValue]struct{}) int {
+	if _, ok := seen[v]; v == nil || ok {
+		return 0
+	}
+	seen[v] = struct{}{}
+	return 1 + v.Car.GetSize(seen) + v.Cdr.GetSize(seen)
+}
 func (v *VPair) String() string {
 	if v == nil {
 		return "()"
