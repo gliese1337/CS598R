@@ -26,12 +26,13 @@
         (unwrap Expr)
         (Wraptype Expr)
         (call Expr Expr ...)]
-  [Op boolean Wraptype unwrap defer spawn force vau + - * > < =]
+  [Op boolean Wraptype unwrap defer spawn force vau error + - * > < =]
   [Callable Op Env
             (Wraptype Callable)
             (vau (X ...) Y Expr)]
   [Idem Callable number]
   [Evable X Pointer (l Value ...)]
+  [Err (err any)]
   [Value Evable Idem]
   [Atomic X Op number]
   [BValue Env
@@ -40,7 +41,7 @@
           (vau (X ...) Y Expr)
           (Wraptype BValue)]
   [FValue Atomic (l FValue ...)]
-  [NBNode Wraptype Callwrap call call-fn thunk unwrap thunk l strict]
+  [NBNode Wraptype Callwrap call call-fn thunk unwrap thunk l strict err]
   [Node NBNode heap env]
   [C (Heap CC) CC] ;answer evaluation
   [CC hole
@@ -76,6 +77,11 @@
         (in-hole C ((trim-heap Heap BValue) BValue))
         (side-condition (term (contains-unused Heap BValue)))
         "GC")
+   ;Error
+   (--> (in-hole C (err any)) any
+        "err")
+   (--> (in-hole C (strict (err any))) any
+        "s err")
    ;eval cases
    (--> (in-hole C (Env Idem))
         (in-hole C Idem)
@@ -129,7 +135,10 @@
         (in-hole C (Env Expr))
         "unwrap")
    (--> (in-hole C (Env (call Op Expr ...)))
-        (in-hole C (delta Env Op Expr ...))
+        (in-hole C ,(with-handlers
+                        ([exn:fail:redex?
+                          (lambda (exn) (term (err "runtime error")))])
+                      (term (delta Env Op Expr ...))))
         "delta")
    (--> (in-hole C (call Env Expr))
         (in-hole C (Env Expr))
@@ -143,8 +152,7 @@
   [(value (Wraptype Expr)) (l Wraptype Expr)])
 
 (define-metafunction vernel
-  lookup : Env X -> Value
-  [(lookup (env) X) ,(error "unbound variable")]
+  [(lookup (env) X) (err "unbound variable")]
   [(lookup (env (X Value) Binding ...) X) Value]
   [(lookup (env (Y Value) Binding ...) X) (lookup (env Binding ...) X)])
 
@@ -253,7 +261,8 @@
   [(delta Env * number_1 number_2) ,(* (term number_1) (term number_2))]
   [(delta Env < number_1 number_2) ,(< (term number_1) (term number_2))]
   [(delta Env > number_1 number_2) ,(> (term number_1) (term number_2))]
-  [(delta Env = Value_1 Value_2) ,(eq? (term Value_1) (term Value_2))])
+  [(delta Env = Value_1 Value_2) ,(eq? (term Value_1) (term Value_2))]
+  [(delta Env error any) (err any)])
 
 
 ;test Env patterns
@@ -478,3 +487,42 @@
           (term ((env) (l + 1 2))) 3)
 (test-->> reduce
           (term ((env) (l (l = (l + 1 2) 0) #t #f))) #f)
+
+;test error
+(test-->> reduce
+          (term ((env) a))
+          "unbound variable")
+(test-->> reduce
+          (term ((env) (l + a 1)))
+          "runtime error")
+(test-->> reduce
+          (term ((env) (l error a)))
+          (term a))
+
+
+(traces reduce
+          (term ((env) (l (l (l wrap wrap-ltr)
+                             (l vau (l n m) y m))
+                          (l error 1)
+                          (l error 2)))))
+(traces reduce
+          (term ((env) (l (l (l wrap wrap)
+                             (l vau (l n m) y m))
+                          (l error 1)
+                          (l error 2)))))
+(traces reduce
+          (term ((env) (l (l (l wrap wrap-r6rs)
+                             (l vau (l n m) y m))
+                          (l error 1)
+                          (l error 2)))))
+(traces reduce
+          (term ((env) (l (l (l wrap wrap-future)
+                             (l vau (l n m) y m))
+                          (l error 2)
+                          (l error 1)))))
+(traces reduce
+          (term ((env) (l (l (l wrap wrap) force)
+                          (l (l (l wrap wrap-lazy)
+                                (l vau (l n m) y m))
+                             (l error 1)
+                             (l error 2))))))
