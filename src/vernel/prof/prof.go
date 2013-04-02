@@ -13,6 +13,7 @@ var plock sync.RWMutex
 
 func StartProfile() {
 	profile = true
+	work = 0
 	cycles = make([]map[VValue]struct{}, 0, 100)
 	threds = make([]int, 0, 100)
 }
@@ -53,7 +54,7 @@ func calcMem() []int {
 		for k, _ := range m {
 			if k == nil {
 				total += 1
-			}else{
+			} else {
 				total += k.GetSize(seen)
 			}
 		}
@@ -73,8 +74,9 @@ func WriteProfile(fname string) {
 		threds = nil
 		cycles = nil
 	}()
-	file.WriteString(fmt.Sprintf("Total Cycles: %d\nCycle\tThreads\tMemory\n", len(cycles)))
+	file.WriteString(fmt.Sprintf("Total Cycles: %d\nTotal Work: %d\nCycle\tThreads\tMemory\n", len(cycles), work))
 	for i, m := range calcMem() {
 		file.WriteString(fmt.Sprintf("%d:\t%d\t%d\n", i, threds[i], m))
 	}
+	profile = false
 }

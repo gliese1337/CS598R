@@ -92,7 +92,13 @@ func (f *Future) GetSize(seen map[VValue]struct{}) int {
 		return 0
 	}
 	seen[f] = struct{}{}
-	return 1 + f.result.GetSize(seen) + f.expr.GetSize(seen) + f.env.GetSize(seen) + f.k.GetSize(seen)
+	f.lock.Lock()
+	if f.fulfilled {
+		f.lock.Unlock()
+		return 1 + f.result.GetSize(seen)
+	}
+	f.lock.Unlock()
+	return 1 + f.expr.GetSize(seen) + f.env.GetSize(seen) + f.k.GetSize(seen)
 }
 
 func (f *Future) String() string {
@@ -170,14 +176,20 @@ func (t *Thunk) GetSize(seen map[VValue]struct{}) int {
 		return 0
 	}
 	seen[t] = struct{}{}
-	return 1 + t.result.GetSize(seen) + t.expr.GetSize(seen) + t.env.GetSize(seen) + t.k.GetSize(seen)
+	t.lock.Lock()
+	if t.fulfilled {
+		t.lock.Unlock()
+		return 1 + t.result.GetSize(seen)
+	}
+	t.lock.Unlock()
+	return 1 + t.expr.GetSize(seen) + t.env.GetSize(seen) + t.k.GetSize(seen)
 }
 
 func (t *Thunk) String() string {
 	if t.fulfilled {
 		return fmt.Sprintf("%v", t.result)
 	}
-	return "<thunk>"
+	return fmt.Sprintf("<thunk:%v>", t.expr)
 }
 
 type EvalDefer struct {
@@ -264,7 +276,13 @@ func (e *EvalDefer) GetSize(seen map[VValue]struct{}) int {
 		return 0
 	}
 	seen[e] = struct{}{}
-	return 1 + e.result.GetSize(seen) + e.d.GetSize(seen) + e.env.GetSize(seen) + e.k.GetSize(seen)
+	e.lock.Lock()
+	if e.fulfilled {
+		e.lock.Unlock()
+		return 1 + e.result.GetSize(seen)
+	}
+	e.lock.Unlock()
+	return 1 + e.d.GetSize(seen) + e.env.GetSize(seen) + e.k.GetSize(seen)
 }
 
 func (e *EvalDefer) String() string {

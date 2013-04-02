@@ -1,0 +1,103 @@
+(def q (vau (a) % a))
+(def cons (wrap/ltr qcons))
+(def car (wrap/ltr qcar))
+(def cdr (wrap/ltr qcdr))
+(def seq (wrap/ltr last))
+(def eq? (wrap/ltr qeq?))
+(def qnil? (vau (a) % (eq? a ())))
+(def nil? (wrap/ltr qnil?))
+(def bool? (wrap/ltr qbool?))
+(def unwrap (wrap/ltr qunwrap))
+(def '@ (vau (p args) %
+	(% (cons (unwrap p) args))))
+(def @ (wrap/ltr '@))
+(def qcall (vau (p . args) %
+	(% (cons p args))))
+(def call (wrap/ltr qcall))
+
+(def list (wrap/ltr qlist))
+
+(def map (wrap/ltr (vau (f l) % ((nil? l) ()
+	(cons (f (car l)) (map f (cdr l)))))))
+
+(def for (wrap/ltr (vau (f l) %
+	(% (cons list (map (vau (i) % (list f (% i))) l))))))
+
+(def print (wrap/ltr qprint))
+
+(def > (wrap '>))
+(def < (wrap '<))
+(def - (wrap '-))
+(def abs (wrap (vau (x) % ((> x 0) x (- 0 x)))))
+(def * (wrap '*))
+(def square (wrap (vau (x) % (* x x))))
+(def / (wrap '/))
+(def + (wrap '+))
+(def average (wrap (vau (x y) % (/ (+ x y) 2))))
+
+(def good-enough? 
+    (wrap (vau (guess x) % (seq 
+	(def sqr (square guess))
+	(def diff (- x (square guess)))
+	(< (abs diff) 0.00001)))))
+(def improve
+	(wrap (vau (guess x) %
+		(average guess (/ x guess)))))
+(def sqrt-iter 
+    (wrap (vau (guess x) %
+        ((good-enough? guess x) guess (sqrt-iter (improve guess x) x)))))
+
+(def sqrt (wrap (vau (x) % (sqrt-iter 1.0 x))))
+
+(def check (vau (a b name) % 
+	(def va (% a))
+	(def vb (% b))
+	((eq? va vb)
+		(print "Passed " name "
+")
+		(print "Failed " name ": " a " = " va ", " b " = " vb "
+"))))
+(def cond (vau opts eval
+	((nil? opts) ()
+		(seq
+			(def opt (car opts))
+			(def test (eval (car opt)))
+			((bool? test)
+				(eval (test
+					(car (cdr opt))
+					(cons cond (cdr opts))))
+				(panic "Non-boolean condition"))))))
+
+(def var (vau (a . b) % b))
+
+(sprof)
+(def sqrts (for sqrt (qlist 1 2 3 4 5 6 7 8 9)))
+(check (car (qcons a b)) (q a) "'car'/'qcons' test 1")
+(check (car (qcons (a b) c)) (q (a b)) "'car'/'qcons' test 2")
+(check (cdr (qcons a (b c))) (q (b c)) "'car'/'qcons' test 3")
+(check (qcar (cons a b)) (q cons) "'qcar'/'cons' test")
+(check (car (cons #t #f)) #t "'car'/'cons' test")
+(check (cdr (cons #t #f)) #f "'cdr'/'cons' test")
+(check (bind/cc k (seq #t (k #f) car cdr)) #f "'bind/cc' test")
+(check (@ cons (q (a b))) (q (a . b)) "@ test")
+(check (call qcons (q a) (q b)) (q ( a . b)) "call test")
+(check (var a b c d) (qlist b c d) "variadic test 1")
+(check (call var 1 2 3 4) (qlist 2 3 4) "variadic test 2")
+(check (cond) () "empty cond")
+(check (cond (#t "result"))
+	"result"
+	"cond test 1")
+(check (cond
+	(#f "false")
+	(#t "true"))
+	"true"
+	"cond test 2")
+(check (cond
+	(#f "hello")
+	((nil? 5) "yo")
+	((car (qlist #t #f)) "result"))
+	"result"
+	"cond test 3")
+(print sqrts "
+")
+(wprof "ltrprof.txt")
